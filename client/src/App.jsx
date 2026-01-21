@@ -24,6 +24,7 @@ import {
   Popconfirm,
   Empty,
   Tooltip,
+  Select,
 } from 'antd';
 import {
   UserOutlined,
@@ -41,6 +42,7 @@ import {
   SafetyCertificateOutlined,
   LoginOutlined,
   HomeOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { ConfigProvider, useConfig } from './contexts/ConfigContext';
@@ -50,6 +52,23 @@ import Home from './pages/Home';
 const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+
+// === 金额格式化工具 ===
+// 格式化数字为千分位显示
+const formatISK = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+  const num = typeof value === 'string' ? parseFloat(value.replace(/,/g, '')) : value;
+  if (isNaN(num)) return '';
+  return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
+};
+
+// 解析格式化后的数字（去除逗号）
+const parseISK = (value) => {
+  if (!value) return 0;
+  const cleaned = value.toString().replace(/,/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+};
 
 // === 环境配置 ===
 const isDev = import.meta.env.DEV;
@@ -270,6 +289,8 @@ function UserLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useLanguage();
+  const { config } = useConfig();
+  const corpLogoUrl = getCorporationLogoUrl(config.corpId, 64);
 
   const handleLogout = () => {
     localStorage.removeItem('user');
@@ -297,7 +318,16 @@ function UserLayout({ children }) {
         backdropFilter: 'blur(10px)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', marginRight: 48 }}>
-          <RocketOutlined style={{ fontSize: 24, color: '#3b82f6', marginRight: 12 }} />
+          {config.corpId ? (
+            <img 
+              src={corpLogoUrl} 
+              alt={config.corpName}
+              className="w-8 h-8 rounded-full border-2 border-eve/50 hover:border-eve transition-colors"
+              style={{ marginRight: 12 }}
+            />
+          ) : (
+            <RocketOutlined style={{ fontSize: 24, color: '#3b82f6', marginRight: 12 }} />
+          )}
           <Title level={4} style={{ margin: 0, color: '#f1f5f9' }}>{t.srp.srpSystem}</Title>
         </div>
         
@@ -519,6 +549,7 @@ function MyRequests() {
   const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [playerStats, setPlayerStats] = useState(null);
   const { t } = useLanguage();
 
   useEffect(() => {
@@ -526,6 +557,7 @@ function MyRequests() {
       navigate('/srp');
       return;
     }
+    // 获取申请记录
     userApi.get(`/srp/my/${user.charId}`)
       .then(res => setRequests(res.data))
       .catch(err => {
@@ -533,6 +565,11 @@ function MyRequests() {
         message.error('获取申请记录失败');
       })
       .finally(() => setLoading(false));
+    
+    // 获取玩家统计
+    userApi.get(`/srp/stats/${user.charId}`)
+      .then(res => setPlayerStats(res.data))
+      .catch(err => console.error('获取统计失败:', err));
   }, []);
 
   const columns = [
@@ -583,6 +620,20 @@ function MyRequests() {
       },
     },
     {
+      title: t.srp.payoutAmount || '补损金额',
+      dataIndex: 'payout_amount',
+      key: 'payout_amount',
+      width: 130,
+      align: 'right',
+      render: (amount, record) => (
+        record.status === 'approved' && amount > 0 ? (
+          <Text style={{ color: '#10b981', fontWeight: 'bold' }}>{amount.toLocaleString()} ISK</Text>
+        ) : (
+          <Text type="secondary">-</Text>
+        )
+      ),
+    },
+    {
       title: t.srp.adminFeedback,
       key: 'admin_feedback',
       render: (_, record) => (
@@ -604,6 +655,59 @@ function MyRequests() {
 
   return (
     <UserLayout>
+      {/* 玩家补损统计卡片 */}
+      {playerStats && (
+        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+          <Col xs={24} sm={8}>
+            <Card 
+              style={{ 
+                background: 'rgba(30, 41, 59, 0.6)',
+                border: '1px solid rgba(51, 65, 85, 0.5)',
+              }}
+            >
+              <Statistic 
+                title={<Text type="secondary">{t.srp.totalRequests || '总申请数'}</Text>}
+                value={playerStats.totalRequests}
+                valueStyle={{ color: '#f1f5f9' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={8}>
+            <Card 
+              style={{ 
+                background: 'rgba(30, 41, 59, 0.6)',
+                border: '1px solid rgba(51, 65, 85, 0.5)',
+                borderLeft: '4px solid #10b981',
+              }}
+            >
+              <Statistic 
+                title={<Text type="secondary">{t.srp.approvedRequests || '已批准'}</Text>}
+                value={playerStats.approvedCount}
+                valueStyle={{ color: '#10b981' }}
+                prefix={<CheckCircleOutlined />}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={8}>
+            <Card 
+              style={{ 
+                background: 'rgba(30, 41, 59, 0.6)',
+                border: '1px solid rgba(51, 65, 85, 0.5)',
+                borderLeft: '4px solid #f59e0b',
+              }}
+            >
+              <Statistic 
+                title={<Text type="secondary">{t.srp.totalPayout || '累计补损'}</Text>}
+                value={playerStats.totalPayout}
+                valueStyle={{ color: '#f59e0b' }}
+                suffix="ISK"
+                formatter={(value) => value.toLocaleString()}
+              />
+            </Card>
+          </Col>
+        </Row>
+      )}
+
       <Card
         title={
           <Space>
@@ -634,6 +738,8 @@ function MyRequests() {
 // 6. 管理员界面
 function Admin() {
   const { t } = useLanguage();
+  const { config } = useConfig();
+  const corpLogoUrl = getCorporationLogoUrl(config.corpId, 64);
   const [creds, setCreds] = useState({ username: '', password: '' });
   const [token, setToken] = useState(localStorage.getItem('adminToken'));
   const [adminInfo, setAdminInfo] = useState(null);
@@ -642,11 +748,18 @@ function Admin() {
   const [filter, setFilter] = useState('all');
   const [reviewModal, setReviewModal] = useState(null);
   const [adminComment, setAdminComment] = useState('');
+  const [payoutAmount, setPayoutAmount] = useState('');
   const [view, setView] = useState('requests');
   const [admins, setAdmins] = useState([]);
   const [newAdmin, setNewAdmin] = useState({ username: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
+  const [payoutStats, setPayoutStats] = useState(null);
+  // 编辑弹窗状态
+  const [editModal, setEditModal] = useState(null);
+  const [editStatus, setEditStatus] = useState('');
+  const [editPayoutAmount, setEditPayoutAmount] = useState('');
+  const [editAdminComment, setEditAdminComment] = useState('');
 
   const login = async () => {
     if (!creds.username || !creds.password) {
@@ -710,14 +823,59 @@ function Admin() {
       await adminApi.post('/admin/review', {
         id: reviewModal.id,
         action,
-        adminComment
+        adminComment,
+        payoutAmount: action === 'approve' ? parseISK(payoutAmount) : 0
       });
       message.success(action === 'approve' ? '已批准' : '已拒绝');
       setReviewModal(null);
       setAdminComment('');
+      setPayoutAmount('');
       fetchRequests(token, filter);
+      fetchPayoutStats();  // 刷新统计
     } catch (err) {
       message.error('操作失败: ' + (err.response?.data?.error || '未知错误'));
+    }
+  };
+
+  const fetchPayoutStats = async () => {
+    try {
+      const res = await adminApi.get('/admin/payout-stats');
+      setPayoutStats(res.data);
+    } catch (err) {
+      console.error('获取支出统计失败:', err);
+    }
+  };
+
+  // 打开编辑弹窗
+  const openEditModal = (record) => {
+    setEditModal(record);
+    setEditStatus(record.status);
+    setEditPayoutAmount(record.payout_amount?.toString() || '0');
+    setEditAdminComment(record.admin_comment || '');
+  };
+
+  // 关闭编辑弹窗
+  const closeEditModal = () => {
+    setEditModal(null);
+    setEditStatus('');
+    setEditPayoutAmount('');
+    setEditAdminComment('');
+  };
+
+  // 保存编辑
+  const handleSaveEdit = async () => {
+    try {
+      await adminApi.put(`/admin/request/${editModal.id}`, {
+        status: editStatus,
+        payoutAmount: editStatus === 'approved' ? parseISK(editPayoutAmount) : 0,
+        adminComment: editAdminComment
+      });
+      message.success('修改成功');
+      closeEditModal();
+      fetchRequests(token, filter);
+      fetchPayoutStats();
+    } catch (err) {
+      message.error('修改失败: ' + (err.response?.data?.error || '未知错误'));
     }
   };
 
@@ -754,6 +912,7 @@ function Admin() {
   useEffect(() => {
     if (token) {
       fetchRequests(token);
+      fetchPayoutStats();
     }
   }, [token]);
 
@@ -903,6 +1062,20 @@ function Admin() {
       },
     },
     {
+      title: t.admin.payoutAmount || '补损金额',
+      dataIndex: 'payout_amount',
+      key: 'payout_amount',
+      width: 130,
+      align: 'right',
+      render: (amount, record) => (
+        record.status === 'approved' && amount > 0 ? (
+          <Text style={{ color: '#f59e0b' }}>{amount.toLocaleString()} ISK</Text>
+        ) : (
+          <Text type="secondary">-</Text>
+        )
+      ),
+    },
+    {
       title: t.admin.adminComment,
       dataIndex: 'admin_comment',
       key: 'admin_comment',
@@ -912,7 +1085,7 @@ function Admin() {
     {
       title: t.admin.action,
       key: 'action',
-      width: 100,
+      width: 140,
       align: 'center',
       render: (_, record) => (
         record.status === 'pending' ? (
@@ -924,9 +1097,20 @@ function Admin() {
             {t.admin.review}
           </Button>
         ) : (
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {record.reviewed_by}
-          </Text>
+          <Space size={4}>
+            <Tooltip title={t.admin.edit || '编辑'}>
+              <Button
+                type="text"
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => openEditModal(record)}
+                style={{ color: '#3b82f6' }}
+              />
+            </Tooltip>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {record.reviewed_by}
+            </Text>
+          </Space>
         )
       ),
     },
@@ -996,7 +1180,16 @@ function Admin() {
         backdropFilter: 'blur(10px)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', marginRight: 48 }}>
-          <SafetyCertificateOutlined style={{ fontSize: 24, color: '#3b82f6', marginRight: 12 }} />
+          {config.corpId ? (
+            <img 
+              src={corpLogoUrl} 
+              alt={config.corpName}
+              className="w-8 h-8 rounded-full border-2 border-eve/50 hover:border-eve transition-colors"
+              style={{ marginRight: 12 }}
+            />
+          ) : (
+            <SafetyCertificateOutlined style={{ fontSize: 24, color: '#3b82f6', marginRight: 12 }} />
+          )}
           <Title level={4} style={{ margin: 0, color: '#f1f5f9' }}>{t.admin.dashboard}</Title>
         </div>
         
@@ -1115,6 +1308,78 @@ function Admin() {
               </Col>
             </Row>
 
+            {/* 补损支出统计 */}
+            {payoutStats && (
+              <Card
+                title={
+                  <Space>
+                    <RocketOutlined />
+                    <span>{t.admin.payoutStats || '补损支出统计'}</span>
+                  </Space>
+                }
+                style={{ 
+                  marginBottom: 24,
+                  background: 'rgba(30, 41, 59, 0.6)',
+                  border: '1px solid rgba(51, 65, 85, 0.5)',
+                }}
+              >
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} sm={8}>
+                    <Statistic 
+                      title={<Text type="secondary">{t.admin.totalPayout || '总支出'}</Text>}
+                      value={payoutStats.totals.totalPayout}
+                      valueStyle={{ color: '#f59e0b' }}
+                      suffix="ISK"
+                      formatter={(value) => value.toLocaleString()}
+                    />
+                  </Col>
+                  <Col xs={24} sm={8}>
+                    <Statistic 
+                      title={<Text type="secondary">{t.admin.approvedRequests || '已批准申请'}</Text>}
+                      value={payoutStats.totals.approvedCount}
+                      valueStyle={{ color: '#10b981' }}
+                      suffix={`/ ${payoutStats.totals.totalRequests}`}
+                    />
+                  </Col>
+                  <Col xs={24} sm={8}>
+                    <Statistic 
+                      title={<Text type="secondary">{t.admin.avgPayout || '平均补损'}</Text>}
+                      value={payoutStats.totals.approvedCount > 0 ? Math.round(payoutStats.totals.totalPayout / payoutStats.totals.approvedCount) : 0}
+                      valueStyle={{ color: '#3b82f6' }}
+                      suffix="ISK"
+                      formatter={(value) => value.toLocaleString()}
+                    />
+                  </Col>
+                </Row>
+                {payoutStats.byPlayer && payoutStats.byPlayer.length > 0 && (
+                  <div style={{ marginTop: 16 }}>
+                    <Divider orientation="left" style={{ borderColor: 'rgba(51, 65, 85, 0.5)' }}>
+                      <Text type="secondary">{t.admin.topPlayers || 'TOP 玩家补损'}</Text>
+                    </Divider>
+                    <Row gutter={[8, 8]}>
+                      {payoutStats.byPlayer.slice(0, 5).map((player, index) => (
+                        <Col key={player.char_id} xs={24} sm={12} md={8}>
+                          <Card size="small" style={{ background: 'rgba(15, 17, 25, 0.4)' }}>
+                            <Space>
+                              <Tag color={index === 0 ? 'gold' : index === 1 ? 'silver' : 'default'}>
+                                #{index + 1}
+                              </Tag>
+                              <Text strong>{player.char_name}</Text>
+                            </Space>
+                            <div style={{ marginTop: 4 }}>
+                              <Text type="secondary" style={{ fontSize: 12 }}>
+                                {player.request_count} 次 · {player.total_amount.toLocaleString()} ISK
+                              </Text>
+                            </div>
+                          </Card>
+                        </Col>
+                      ))}
+                    </Row>
+                  </div>
+                )}
+              </Card>
+            )}
+
             <Card
               title={
                 <Space>
@@ -1207,9 +1472,9 @@ function Admin() {
             </Space>
           }
           open={!!reviewModal}
-          onCancel={() => { setReviewModal(null); setAdminComment(''); }}
+          onCancel={() => { setReviewModal(null); setAdminComment(''); setPayoutAmount(''); }}
           footer={[
-            <Button key="cancel" onClick={() => { setReviewModal(null); setAdminComment(''); }}>
+            <Button key="cancel" onClick={() => { setReviewModal(null); setAdminComment(''); setPayoutAmount(''); }}>
               {t.srp.cancel}
             </Button>,
             <Button 
@@ -1244,12 +1509,108 @@ function Admin() {
                   <Text><FileTextOutlined style={{ marginRight: 8 }} />{t.admin.playerComment}: {reviewModal.player_comment || '无'}</Text>
                 </Space>
               </Card>
+
+              <div>
+                <Text style={{ marginBottom: 8, display: 'block' }}>{t.admin.payoutAmount || '补损金额 (ISK)'}:</Text>
+                <Input
+                  value={formatISK(payoutAmount)}
+                  onChange={e => {
+                    // 只允许输入数字和逗号
+                    const val = e.target.value.replace(/[^0-9,]/g, '');
+                    setPayoutAmount(val.replace(/,/g, ''));
+                  }}
+                  placeholder="输入补损金额，如 50,000,000"
+                  suffix="ISK"
+                  style={{ width: '100%' }}
+                />
+              </div>
               
               <div>
                 <Text style={{ marginBottom: 8, display: 'block' }}>{t.admin.adminSuggestion}:</Text>
                 <TextArea
                   value={adminComment}
                   onChange={e => setAdminComment(e.target.value)}
+                  placeholder={t.admin.adminCommentPlaceholder}
+                  rows={4}
+                />
+              </div>
+            </Space>
+          )}
+        </Modal>
+
+        {/* 编辑弹窗 */}
+        <Modal
+          title={
+            <Space>
+              <EditOutlined />
+              <span>{t.admin.editRequest || '编辑申请'}</span>
+            </Space>
+          }
+          open={!!editModal}
+          onCancel={closeEditModal}
+          footer={[
+            <Button key="cancel" onClick={closeEditModal}>
+              {t.srp.cancel}
+            </Button>,
+            <Button 
+              key="save" 
+              type="primary"
+              icon={<CheckCircleOutlined />}
+              onClick={handleSaveEdit}
+            >
+              {t.admin.save || '保存'}
+            </Button>,
+          ]}
+          width={520}
+        >
+          {editModal && (
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              <Card size="small" style={{ background: 'rgba(15, 17, 25, 0.4)' }}>
+                <Space direction="vertical" size={8}>
+                  <Text><UserOutlined style={{ marginRight: 8 }} />{t.admin.character}: <Text strong>{editModal.char_name}</Text></Text>
+                  <Text>
+                    <LinkOutlined style={{ marginRight: 8 }} />
+                    zKill: <a href={editModal.zkill_url} target="_blank" rel="noopener noreferrer">{editModal.zkill_url}</a>
+                  </Text>
+                  <Text><FileTextOutlined style={{ marginRight: 8 }} />{t.admin.playerComment}: {editModal.player_comment || '无'}</Text>
+                </Space>
+              </Card>
+
+              <div>
+                <Text style={{ marginBottom: 8, display: 'block' }}>{t.admin.status || '状态'}:</Text>
+                <Select
+                  value={editStatus}
+                  onChange={setEditStatus}
+                  style={{ width: '100%' }}
+                  options={[
+                    { value: 'pending', label: <Tag color="orange" icon={<ClockCircleOutlined />}>{t.admin.pending || '待审核'}</Tag> },
+                    { value: 'approved', label: <Tag color="green" icon={<CheckCircleOutlined />}>{t.admin.approved || '已批准'}</Tag> },
+                    { value: 'rejected', label: <Tag color="red" icon={<CloseCircleOutlined />}>{t.admin.rejected || '已拒绝'}</Tag> },
+                  ]}
+                />
+              </div>
+
+              {editStatus === 'approved' && (
+                <div>
+                  <Text style={{ marginBottom: 8, display: 'block' }}>{t.admin.payoutAmount || '补损金额 (ISK)'}:</Text>
+                  <Input
+                    value={formatISK(editPayoutAmount)}
+                    onChange={e => {
+                      const val = e.target.value.replace(/[^0-9,]/g, '');
+                      setEditPayoutAmount(val.replace(/,/g, ''));
+                    }}
+                    placeholder="输入补损金额，如 50,000,000"
+                    suffix="ISK"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              )}
+              
+              <div>
+                <Text style={{ marginBottom: 8, display: 'block' }}>{t.admin.adminSuggestion}:</Text>
+                <TextArea
+                  value={editAdminComment}
+                  onChange={e => setEditAdminComment(e.target.value)}
                   placeholder={t.admin.adminCommentPlaceholder}
                   rows={4}
                 />

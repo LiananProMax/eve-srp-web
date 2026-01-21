@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
@@ -21,17 +22,24 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false
 }));
 
-// 2. CORS 配置 - 限制允许的来源
-const allowedOrigins = [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    process.env.FRONTEND_URL
-].filter(Boolean);
+// 2. CORS 配置 - 从环境变量读取允许的来源
+// ALLOWED_ORIGINS 支持逗号分隔的多个地址，如: http://localhost:5173,http://localhost:5174
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:5174')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
+
+// 是否允许所有 localhost 端口（开发环境推荐开启）
+const allowAllLocalhost = process.env.ALLOW_ALL_LOCALHOST === 'true';
 
 app.use(cors({
     origin: function (origin, callback) {
         // 允许无 origin 的请求（如 Postman、curl）在开发环境
         if (!origin && process.env.NODE_ENV !== 'production') {
+            return callback(null, true);
+        }
+        // 如果启用了允许所有 localhost 端口
+        if (allowAllLocalhost && origin && origin.match(/^http:\/\/localhost:\d+$/)) {
             return callback(null, true);
         }
         if (allowedOrigins.includes(origin)) {
@@ -359,6 +367,26 @@ app.get('/api/srp/my/:charId',
     }
 );
 
+// === 4.1 玩家获取自己的补损统计 ===
+app.get('/api/srp/stats/:charId', 
+    authenticateUser,
+    [
+        param('charId').isInt({ min: 1 }).withMessage('角色ID必须是正整数')
+    ],
+    handleValidationErrors,
+    validateUserOwnership,
+    (req, res) => {
+        const { charId } = req.params;
+        try {
+            const stats = db.getPlayerPayoutStats(parseInt(charId));
+            res.json(stats);
+        } catch (error) {
+            console.error("Get player stats error:", error.message);
+            res.status(500).json({ error: '获取统计信息失败' });
+        }
+    }
+);
+
 // === 5. 管理员登录 ===
 app.post('/api/admin/login', 
     loginLimiter,  // 登录专用速率限制
@@ -412,13 +440,14 @@ app.post('/api/admin/review',
     [
         body('id').isInt({ min: 1 }).withMessage('无效的申请ID'),
         body('action').isIn(['approve', 'reject']).withMessage('操作必须是 approve 或 reject'),
+        body('payoutAmount').optional().isFloat({ min: 0 }).withMessage('补损金额必须是非负数'),
         body('adminComment').optional().isString().isLength({ max: 500 }).withMessage('管理员备注不能超过500字符')
     ],
     handleValidationErrors,
     (req, res) => {
-        const { id, action, adminComment } = req.body;
+        const { id, action, adminComment, payoutAmount } = req.body;
 
-        const success = db.reviewRequest(id, action, adminComment || '', req.admin.username);
+        const success = db.reviewRequest(id, action, adminComment || '', req.admin.username, payoutAmount || 0);
         if (success) {
             res.json({ success: true });
         } else {
@@ -438,6 +467,36 @@ app.get('/api/admin/request/:id', authenticateAdmin, (req, res) => {
     }
 });
 
+// === 8.1 编辑申请（管理员） ===
+app.put('/api/admin/request/:id', 
+    authenticateAdmin, 
+    [
+        param('id').isInt({ min: 1 }).withMessage('无效的申请ID'),
+        body('status').isIn(['pending', 'approved', 'rejected']).withMessage('状态必须是 pending、approved 或 rejected'),
+        body('payoutAmount').optional().isFloat({ min: 0 }).withMessage('补损金额必须是非负数'),
+        body('adminComment').optional().isString().isLength({ max: 500 }).withMessage('管理员备注不能超过500字符')
+    ],
+    handleValidationErrors,
+    (req, res) => {
+        const { id } = req.params;
+        const { status, payoutAmount, adminComment } = req.body;
+
+        const success = db.updateRequest(
+            parseInt(id), 
+            status, 
+            payoutAmount || 0, 
+            adminComment || '', 
+            req.admin.username
+        );
+        
+        if (success) {
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: '申请不存在' });
+        }
+    }
+);
+
 // === 9. 获取申请统计 ===
 app.get('/api/admin/stats', authenticateAdmin, (req, res) => {
     try {
@@ -446,6 +505,17 @@ app.get('/api/admin/stats', authenticateAdmin, (req, res) => {
     } catch (error) {
         console.error("Get stats error:", error.message);
         res.status(500).json({ error: '获取统计信息失败' });
+    }
+});
+
+// === 9.1 获取补损支出统计（管理员） ===
+app.get('/api/admin/payout-stats', authenticateAdmin, (req, res) => {
+    try {
+        const payoutStats = db.getPayoutStats();
+        res.json(payoutStats);
+    } catch (error) {
+        console.error("Get payout stats error:", error.message);
+        res.status(500).json({ error: '获取支出统计失败' });
     }
 });
 
