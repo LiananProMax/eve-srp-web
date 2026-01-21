@@ -1,76 +1,61 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { BrowserRouter, Routes, Route, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
+import {
+  Layout,
+  Menu,
+  Button,
+  Card,
+  Table,
+  Tag,
+  Space,
+  Typography,
+  Input,
+  Form,
+  Modal,
+  Spin,
+  Statistic,
+  Row,
+  Col,
+  Avatar,
+  Divider,
+  message,
+  Result,
+  Popconfirm,
+  Empty,
+  Tooltip,
+} from 'antd';
+import {
+  UserOutlined,
+  LogoutOutlined,
+  FileTextOutlined,
+  PlusOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  ClockCircleOutlined,
+  SettingOutlined,
+  LinkOutlined,
+  RocketOutlined,
+  TeamOutlined,
+  DeleteOutlined,
+  SafetyCertificateOutlined,
+  LoginOutlined,
+  HomeOutlined,
+} from '@ant-design/icons';
+
+const { Header, Content } = Layout;
+const { Title, Text, Paragraph } = Typography;
+const { TextArea } = Input;
 
 const API_BASE = 'http://localhost:3001/api';
 const EVE_CLIENT_ID = 'daa4dbb782144ccdb1d0ac87a33acccb';
 const REDIRECT_URI = 'http://localhost:5173/auth/callback';
 
-// 状态中文映射和颜色
-const STATUS_MAP = {
-  pending: { text: '待审核', color: '#f59e0b', bg: '#fef3c7' },
-  approved: { text: '已批准', color: '#10b981', bg: '#d1fae5' },
-  rejected: { text: '已拒绝', color: '#ef4444', bg: '#fee2e2' }
-};
-
-// 通用样式
-const styles = {
-  container: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '20px',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-  },
-  card: {
-    background: '#fff',
-    borderRadius: '8px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    padding: '20px',
-    marginBottom: '20px'
-  },
-  button: {
-    padding: '10px 20px',
-    fontSize: '14px',
-    borderRadius: '6px',
-    border: 'none',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  },
-  primaryBtn: {
-    background: '#3b82f6',
-    color: 'white'
-  },
-  successBtn: {
-    background: '#10b981',
-    color: 'white'
-  },
-  dangerBtn: {
-    background: '#ef4444',
-    color: 'white'
-  },
-  input: {
-    padding: '10px 12px',
-    fontSize: '14px',
-    border: '1px solid #d1d5db',
-    borderRadius: '6px',
-    width: '100%',
-    boxSizing: 'border-box'
-  },
-  nav: {
-    display: 'flex',
-    gap: '15px',
-    marginBottom: '20px',
-    padding: '15px',
-    background: '#1e293b',
-    borderRadius: '8px'
-  },
-  navLink: {
-    color: '#94a3b8',
-    textDecoration: 'none',
-    padding: '8px 16px',
-    borderRadius: '6px',
-    transition: 'all 0.2s'
-  }
+// 状态配置
+const STATUS_CONFIG = {
+  pending: { text: '待审核', color: 'warning', icon: <ClockCircleOutlined /> },
+  approved: { text: '已批准', color: 'success', icon: <CheckCircleOutlined /> },
+  rejected: { text: '已拒绝', color: 'error', icon: <CloseCircleOutlined /> }
 };
 
 // 1. 登录页
@@ -81,19 +66,66 @@ function Login() {
   };
 
   return (
-    <div style={{ ...styles.container, textAlign: 'center', marginTop: '100px' }}>
-      <div style={styles.card}>
-        <h1 style={{ marginBottom: '10px', color: '#1e293b' }}>军团补损系统 (SRP)</h1>
-        <p style={{ color: '#64748b', marginBottom: '30px' }}>Ship Replacement Program</p>
-        <button
+    <div className="login-background" style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      minHeight: '100vh',
+      padding: '20px'
+    }}>
+      <Card
+        style={{ 
+          width: 420, 
+          textAlign: 'center',
+          background: 'rgba(30, 41, 59, 0.9)',
+          border: '1px solid rgba(59, 130, 246, 0.2)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+        }}
+        styles={{ body: { padding: '48px 32px' } }}
+      >
+        <div style={{ marginBottom: 24 }}>
+          <RocketOutlined style={{ fontSize: 64, color: '#3b82f6', marginBottom: 16 }} />
+          <Title level={2} style={{ margin: 0, color: '#f1f5f9' }}>
+            军团补损系统
+          </Title>
+          <Text type="secondary" style={{ fontSize: 16 }}>
+            Ship Replacement Program
+          </Text>
+        </div>
+        
+        <Divider style={{ borderColor: 'rgba(148, 163, 184, 0.2)' }} />
+        
+        <Paragraph style={{ color: '#94a3b8', marginBottom: 32 }}>
+          使用 EVE Online 账号登录，查看并提交补损申请
+        </Paragraph>
+        
+        <Button
+          type="primary"
+          size="large"
+          icon={<LoginOutlined />}
           onClick={handleLogin}
-          style={{ ...styles.button, ...styles.primaryBtn, padding: '15px 40px', fontSize: '16px' }}
+          style={{ 
+            width: '100%', 
+            height: 50, 
+            fontSize: 16,
+            borderRadius: 8,
+            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+            border: 'none',
+          }}
         >
           使用 EVE SSO 登录
-        </button>
-        <br /><br />
-        <Link to="/admin" style={{ color: '#64748b' }}>管理员入口</Link>
-      </div>
+        </Button>
+        
+        <Divider style={{ borderColor: 'rgba(148, 163, 184, 0.2)' }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>其他入口</Text>
+        </Divider>
+        
+        <Link to="/admin">
+          <Button type="link" icon={<SettingOutlined />}>
+            管理员入口
+          </Button>
+        </Link>
+      </Card>
     </div>
   );
 }
@@ -109,52 +141,124 @@ function AuthCallback() {
       axios.post(`${API_BASE}/auth/eve`, { code })
         .then(res => {
           localStorage.setItem('user', JSON.stringify(res.data));
+          message.success('登录成功！');
           navigate('/dashboard');
         })
         .catch(err => {
-          // 登录失败时清除旧的用户数据
           localStorage.removeItem('user');
-          alert('登录失败：' + (err.response?.data?.error || '非本军团成员'));
+          message.error('登录失败：' + (err.response?.data?.error || '非本军团成员'));
           navigate('/');
         });
     }
   }, [code, navigate]);
 
   return (
-    <div style={{ ...styles.container, textAlign: 'center', marginTop: '100px' }}>
-      <div style={styles.card}>
-        <p>正在验证身份...</p>
-      </div>
+    <div className="login-background" style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      minHeight: '100vh'
+    }}>
+      <Card style={{ 
+        width: 400, 
+        textAlign: 'center',
+        background: 'rgba(30, 41, 59, 0.9)',
+        border: '1px solid rgba(59, 130, 246, 0.2)',
+      }}>
+        <Spin size="large" />
+        <Title level={4} style={{ marginTop: 24, color: '#f1f5f9' }}>
+          正在验证身份...
+        </Title>
+        <Text type="secondary">请稍候，正在与 EVE Online 服务器通信</Text>
+      </Card>
     </div>
   );
 }
 
-// 3. 用户导航栏
-function UserNav({ charName, onLogout }) {
+// 3. 用户布局组件
+function UserLayout({ children }) {
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    message.info('已退出登录');
+    navigate('/');
+  };
+
+  const menuItems = [
+    { key: '/dashboard', icon: <PlusOutlined />, label: '申请补损' },
+    { key: '/my-requests', icon: <FileTextOutlined />, label: '我的申请' },
+  ];
+
   return (
-    <nav style={styles.nav}>
-      <Link to="/dashboard" style={styles.navLink}>申请补损</Link>
-      <Link to="/my-requests" style={styles.navLink}>我的申请</Link>
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '15px' }}>
-        <span style={{ color: '#94a3b8' }}>欢迎, {charName}</span>
-        <button
-          onClick={onLogout}
-          style={{ ...styles.button, background: 'transparent', color: '#94a3b8', padding: '8px 16px' }}
-        >
-          退出
-        </button>
-      </div>
-    </nav>
+    <Layout className="eve-background" style={{ minHeight: '100vh' }}>
+      <Header style={{ 
+        background: 'rgba(15, 17, 25, 0.95)',
+        borderBottom: '1px solid rgba(51, 65, 85, 0.5)',
+        padding: '0 24px',
+        display: 'flex',
+        alignItems: 'center',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        backdropFilter: 'blur(10px)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginRight: 48 }}>
+          <RocketOutlined style={{ fontSize: 24, color: '#3b82f6', marginRight: 12 }} />
+          <Title level={4} style={{ margin: 0, color: '#f1f5f9' }}>SRP 系统</Title>
+        </div>
+        
+        <Menu
+          mode="horizontal"
+          selectedKeys={[location.pathname]}
+          items={menuItems}
+          onClick={({ key }) => navigate(key)}
+          style={{ 
+            flex: 1, 
+            background: 'transparent', 
+            borderBottom: 'none',
+            minWidth: 0,
+          }}
+        />
+        
+        <Space size={16}>
+          <Avatar 
+            style={{ backgroundColor: '#3b82f6' }} 
+            icon={<UserOutlined />}
+          />
+          <Text style={{ color: '#94a3b8' }}>
+            欢迎, <Text strong style={{ color: '#f1f5f9' }}>{user.charName}</Text>
+          </Text>
+          <Button 
+            type="text" 
+            icon={<LogoutOutlined />} 
+            onClick={handleLogout}
+            style={{ color: '#94a3b8' }}
+          >
+            退出
+          </Button>
+        </Space>
+      </Header>
+      
+      <Content style={{ padding: '24px', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
+        {children}
+      </Content>
+    </Layout>
   );
 }
 
 // 4. 用户面板：选择损失
 function Dashboard() {
-  const user = JSON.parse(localStorage.getItem('user'));
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
   const navigate = useNavigate();
   const [losses, setLosses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedLoss, setSelectedLoss] = useState(null);
+  const [comment, setComment] = useState('');
 
   useEffect(() => {
     if (!user?.charId) {
@@ -163,88 +267,165 @@ function Dashboard() {
     }
     axios.get(`${API_BASE}/losses/${user.charId}`)
       .then(res => setLosses(res.data))
-      .catch(err => console.error(err))
+      .catch(err => {
+        console.error(err);
+        message.error('获取损失记录失败');
+      })
       .finally(() => setLoading(false));
   }, []);
 
-  const handleSubmit = async (loss) => {
-    const comment = prompt("备注说明 (可选):");
-    setSubmitting(loss.killmail_id);
+  const openSubmitModal = (loss) => {
+    setSelectedLoss(loss);
+    setComment('');
+    setModalVisible(true);
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedLoss) return;
+    
+    setSubmitting(selectedLoss.killmail_id);
     try {
       await axios.post(`${API_BASE}/srp`, {
         charId: user.charId,
         charName: user.charName,
-        lossMail: loss,
+        lossMail: selectedLoss,
         comment
       });
-      alert('提交成功！可以在"我的申请"中查看进度。');
+      message.success('申请提交成功！可以在"我的申请"中查看进度。');
+      setModalVisible(false);
     } catch (err) {
-      alert('提交失败: ' + (err.response?.data?.error || '未知错误'));
+      message.error('提交失败: ' + (err.response?.data?.error || '未知错误'));
     } finally {
       setSubmitting(null);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    navigate('/');
-  };
-
-  if (!user) return null;
+  if (!user.charId) return null;
 
   return (
-    <div style={styles.container}>
-      <UserNav charName={user.charName} onLogout={handleLogout} />
-      
-      <div style={styles.card}>
-        <h2 style={{ marginBottom: '5px' }}>申请补损</h2>
-        <p style={{ color: '#64748b', marginBottom: '20px' }}>选择需要补损的损失记录</p>
-        
+    <UserLayout>
+      <Card
+        title={
+          <Space>
+            <PlusOutlined />
+            <span>申请补损</span>
+          </Space>
+        }
+        extra={<Text type="secondary">选择需要补损的损失记录</Text>}
+        style={{ 
+          background: 'rgba(30, 41, 59, 0.6)',
+          border: '1px solid rgba(51, 65, 85, 0.5)',
+        }}
+      >
         {loading ? (
-          <p>正在从 zKillboard 获取数据...</p>
-        ) : losses.length === 0 ? (
-          <p style={{ color: '#64748b' }}>暂无损失记录</p>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '15px' }}>
-            {losses.map(loss => (
-              <div key={loss.killmail_id} style={{
-                border: '1px solid #e2e8f0',
-                padding: '15px',
-                borderRadius: '8px',
-                background: '#f8fafc'
-              }}>
-                <p><strong>船只ID:</strong> {loss.ship_type_id}</p>
-                <p><strong>时间:</strong> {new Date(loss.killmail_time).toLocaleString()}</p>
-                <p><strong>损失价值:</strong> {(loss.zkb?.totalValue / 1000000)?.toFixed(2) || '未知'} M ISK</p>
-                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                  <a
-                    href={`https://zkillboard.com/kill/${loss.killmail_id}/`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: '#3b82f6' }}
-                  >
-                    查看详情
-                  </a>
-                  <button
-                    onClick={() => handleSubmit(loss)}
-                    disabled={submitting === loss.killmail_id}
-                    style={{ ...styles.button, ...styles.primaryBtn, marginLeft: 'auto' }}
-                  >
-                    {submitting === loss.killmail_id ? '提交中...' : '申请补损'}
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Spin size="large" />
+            <Paragraph style={{ marginTop: 16 }}>正在从 zKillboard 获取数据...</Paragraph>
           </div>
+        ) : losses.length === 0 ? (
+          <Empty 
+            description="暂无损失记录" 
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        ) : (
+          <Row gutter={[16, 16]}>
+            {losses.map(loss => (
+              <Col xs={24} sm={12} lg={8} key={loss.killmail_id}>
+                <Card
+                  size="small"
+                  style={{ 
+                    background: 'rgba(15, 17, 25, 0.6)',
+                    border: '1px solid rgba(51, 65, 85, 0.5)',
+                  }}
+                  actions={[
+                    <Tooltip title="在 zKillboard 查看详情" key="link">
+                      <a
+                        href={`https://zkillboard.com/kill/${loss.killmail_id}/`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <LinkOutlined /> 详情
+                      </a>
+                    </Tooltip>,
+                    <Button
+                      key="submit"
+                      type="link"
+                      onClick={() => openSubmitModal(loss)}
+                      loading={submitting === loss.killmail_id}
+                    >
+                      <PlusOutlined /> 申请
+                    </Button>
+                  ]}
+                >
+                  <Card.Meta
+                    title={
+                      <Space>
+                        <RocketOutlined style={{ color: '#3b82f6' }} />
+                        <span>船只 ID: {loss.ship_type_id}</span>
+                      </Space>
+                    }
+                    description={
+                      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                        <Text type="secondary">
+                          <ClockCircleOutlined style={{ marginRight: 8 }} />
+                          {new Date(loss.killmail_time).toLocaleString()}
+                        </Text>
+                        <Text style={{ color: '#f59e0b' }}>
+                          损失价值: {(loss.zkb?.totalValue / 1000000)?.toFixed(2) || '未知'} M ISK
+                        </Text>
+                      </Space>
+                    }
+                  />
+                </Card>
+              </Col>
+            ))}
+          </Row>
         )}
-      </div>
-    </div>
+      </Card>
+
+      {/* 提交申请弹窗 */}
+      <Modal
+        title={
+          <Space>
+            <PlusOutlined />
+            <span>提交补损申请</span>
+          </Space>
+        }
+        open={modalVisible}
+        onCancel={() => setModalVisible(false)}
+        onOk={handleSubmit}
+        okText="提交申请"
+        cancelText="取消"
+        confirmLoading={!!submitting}
+      >
+        {selectedLoss && (
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Card size="small" style={{ background: 'rgba(15, 17, 25, 0.4)' }}>
+              <Space direction="vertical" size={4}>
+                <Text>船只 ID: <Text strong>{selectedLoss.ship_type_id}</Text></Text>
+                <Text>击杀时间: <Text type="secondary">{new Date(selectedLoss.killmail_time).toLocaleString()}</Text></Text>
+                <Text>损失价值: <Text style={{ color: '#f59e0b' }}>{(selectedLoss.zkb?.totalValue / 1000000)?.toFixed(2) || '未知'} M ISK</Text></Text>
+              </Space>
+            </Card>
+            <div>
+              <Text style={{ marginBottom: 8, display: 'block' }}>备注说明 (可选):</Text>
+              <TextArea
+                value={comment}
+                onChange={e => setComment(e.target.value)}
+                placeholder="例如：舰队行动中被击毁..."
+                rows={3}
+              />
+            </div>
+          </Space>
+        )}
+      </Modal>
+    </UserLayout>
   );
 }
 
 // 5. 我的申请页面
 function MyRequests() {
-  const user = JSON.parse(localStorage.getItem('user'));
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
   const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -256,92 +437,106 @@ function MyRequests() {
     }
     axios.get(`${API_BASE}/srp/my/${user.charId}`)
       .then(res => setRequests(res.data))
-      .catch(err => console.error(err))
+      .catch(err => {
+        console.error(err);
+        message.error('获取申请记录失败');
+      })
       .finally(() => setLoading(false));
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    navigate('/');
-  };
+  const columns = [
+    {
+      title: '提交时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 180,
+      render: (text) => new Date(text).toLocaleString(),
+    },
+    {
+      title: '船只ID',
+      dataIndex: 'ship_type_id',
+      key: 'ship_type_id',
+      width: 100,
+    },
+    {
+      title: 'zKill链接',
+      dataIndex: 'zkill_url',
+      key: 'zkill_url',
+      width: 100,
+      render: (url) => (
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          <LinkOutlined /> 查看
+        </a>
+      ),
+    },
+    {
+      title: '我的备注',
+      dataIndex: 'player_comment',
+      key: 'player_comment',
+      ellipsis: true,
+      render: (text) => text || <Text type="secondary">-</Text>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 120,
+      align: 'center',
+      render: (status) => {
+        const config = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
+        return (
+          <Tag color={config.color} icon={config.icon}>
+            {config.text}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: '管理员反馈',
+      key: 'admin_feedback',
+      render: (_, record) => (
+        record.admin_comment ? (
+          <Space direction="vertical" size={0}>
+            <Text>{record.admin_comment}</Text>
+            {record.reviewed_by && (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                —— {record.reviewed_by}, {new Date(record.reviewed_at).toLocaleString()}
+              </Text>
+            )}
+          </Space>
+        ) : <Text type="secondary">-</Text>
+      ),
+    },
+  ];
 
-  if (!user) return null;
+  if (!user.charId) return null;
 
   return (
-    <div style={styles.container}>
-      <UserNav charName={user.charName} onLogout={handleLogout} />
-      
-      <div style={styles.card}>
-        <h2 style={{ marginBottom: '5px' }}>我的补损申请</h2>
-        <p style={{ color: '#64748b', marginBottom: '20px' }}>查看申请进度和管理员反馈</p>
-        
-        {loading ? (
-          <p>加载中...</p>
-        ) : requests.length === 0 ? (
-          <p style={{ color: '#64748b' }}>暂无申请记录</p>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f1f5f9' }}>
-                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>提交时间</th>
-                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>船只ID</th>
-                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>zKill链接</th>
-                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>我的备注</th>
-                  <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #e2e8f0' }}>状态</th>
-                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>管理员反馈</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requests.map(req => {
-                  const statusInfo = STATUS_MAP[req.status] || STATUS_MAP.pending;
-                  return (
-                    <tr key={req.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                      <td style={{ padding: '12px' }}>
-                        {new Date(req.created_at).toLocaleString()}
-                      </td>
-                      <td style={{ padding: '12px' }}>{req.ship_type_id}</td>
-                      <td style={{ padding: '12px' }}>
-                        <a href={req.zkill_url} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>
-                          查看
-                        </a>
-                      </td>
-                      <td style={{ padding: '12px', color: '#64748b' }}>{req.player_comment || '-'}</td>
-                      <td style={{ padding: '12px', textAlign: 'center' }}>
-                        <span style={{
-                          padding: '4px 12px',
-                          borderRadius: '20px',
-                          fontSize: '12px',
-                          fontWeight: '500',
-                          color: statusInfo.color,
-                          background: statusInfo.bg
-                        }}>
-                          {statusInfo.text}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px' }}>
-                        {req.admin_comment ? (
-                          <div>
-                            <p style={{ margin: 0, color: '#374151' }}>{req.admin_comment}</p>
-                            {req.reviewed_by && (
-                              <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#9ca3af' }}>
-                                —— {req.reviewed_by}, {new Date(req.reviewed_at).toLocaleString()}
-                              </p>
-                            )}
-                          </div>
-                        ) : (
-                          <span style={{ color: '#9ca3af' }}>-</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
+    <UserLayout>
+      <Card
+        title={
+          <Space>
+            <FileTextOutlined />
+            <span>我的补损申请</span>
+          </Space>
+        }
+        extra={<Text type="secondary">查看申请进度和管理员反馈</Text>}
+        style={{ 
+          background: 'rgba(30, 41, 59, 0.6)',
+          border: '1px solid rgba(51, 65, 85, 0.5)',
+        }}
+      >
+        <Table
+          columns={columns}
+          dataSource={requests}
+          rowKey="id"
+          loading={loading}
+          pagination={{ pageSize: 10 }}
+          locale={{ emptyText: <Empty description="暂无申请记录" /> }}
+          scroll={{ x: 800 }}
+        />
+      </Card>
+    </UserLayout>
   );
 }
 
@@ -355,19 +550,29 @@ function Admin() {
   const [filter, setFilter] = useState('all');
   const [reviewModal, setReviewModal] = useState(null);
   const [adminComment, setAdminComment] = useState('');
-  const [view, setView] = useState('requests'); // 'requests' | 'admins'
+  const [view, setView] = useState('requests');
   const [admins, setAdmins] = useState([]);
   const [newAdmin, setNewAdmin] = useState({ username: '', password: '' });
+  const [loading, setLoading] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
 
   const login = async () => {
+    if (!creds.username || !creds.password) {
+      message.warning('请输入账号和密码');
+      return;
+    }
+    setLoginLoading(true);
     try {
       const res = await axios.post(`${API_BASE}/admin/login`, creds);
       localStorage.setItem('adminToken', res.data.token);
       setToken(res.data.token);
       setAdminInfo(res.data.admin);
+      message.success('登录成功');
       fetchRequests(res.data.token);
     } catch (err) {
-      alert('登录失败: ' + (err.response?.data?.error || '用户名或密码错误'));
+      message.error('登录失败: ' + (err.response?.data?.error || '用户名或密码错误'));
+    } finally {
+      setLoginLoading(false);
     }
   };
 
@@ -375,9 +580,11 @@ function Admin() {
     localStorage.removeItem('adminToken');
     setToken(null);
     setAdminInfo(null);
+    message.info('已退出登录');
   };
 
   const fetchRequests = async (t, statusFilter = 'all') => {
+    setLoading(true);
     try {
       const res = await axios.get(`${API_BASE}/admin/requests`, {
         headers: { Authorization: `Bearer ${t}` },
@@ -389,6 +596,8 @@ function Admin() {
       if (err.response?.status === 403) {
         logout();
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -410,17 +619,18 @@ function Admin() {
         action,
         adminComment
       }, { headers: { Authorization: `Bearer ${token}` } });
+      message.success(action === 'approve' ? '已批准' : '已拒绝');
       setReviewModal(null);
       setAdminComment('');
       fetchRequests(token, filter);
     } catch (err) {
-      alert('操作失败');
+      message.error('操作失败');
     }
   };
 
   const handleAddAdmin = async () => {
     if (!newAdmin.username || !newAdmin.password) {
-      alert('请填写用户名和密码');
+      message.warning('请填写用户名和密码');
       return;
     }
     try {
@@ -429,21 +639,21 @@ function Admin() {
       });
       setNewAdmin({ username: '', password: '' });
       fetchAdmins();
-      alert('添加成功');
+      message.success('添加成功');
     } catch (err) {
-      alert('添加失败: ' + (err.response?.data?.error || '未知错误'));
+      message.error('添加失败: ' + (err.response?.data?.error || '未知错误'));
     }
   };
 
   const handleDeleteAdmin = async (id) => {
-    if (!confirm('确定要删除该管理员吗？')) return;
     try {
       await axios.delete(`${API_BASE}/admin/admins/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchAdmins();
+      message.success('删除成功');
     } catch (err) {
-      alert('删除失败: ' + (err.response?.data?.error || '未知错误'));
+      message.error('删除失败: ' + (err.response?.data?.error || '未知错误'));
     }
   };
 
@@ -459,317 +669,512 @@ function Admin() {
     }
   }, [view]);
 
-  // 登录界面
-  if (!token) {
-    return (
-      <div style={{ ...styles.container, maxWidth: '400px', marginTop: '100px' }}>
-        <div style={styles.card}>
-          <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>管理员登录</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            <input
-              placeholder="账号"
-              value={creds.username}
-              onChange={e => setCreds({ ...creds, username: e.target.value })}
-              style={styles.input}
-            />
-            <input
-              type="password"
-              placeholder="密码"
-              value={creds.password}
-              onChange={e => setCreds({ ...creds, password: e.target.value })}
-              onKeyPress={e => e.key === 'Enter' && login()}
-              style={styles.input}
-            />
-            <button onClick={login} style={{ ...styles.button, ...styles.primaryBtn }}>
-              登录
-            </button>
-          </div>
-          <p style={{ textAlign: 'center', marginTop: '20px' }}>
-            <Link to="/" style={{ color: '#64748b' }}>返回首页</Link>
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // 统计数据
+  // 获取统计数据
   const getStatCount = (status) => {
     const stat = stats.find(s => s.status === status);
     return stat ? stat.count : 0;
   };
 
-  return (
-    <div style={styles.container}>
-      {/* 顶部导航 */}
-      <nav style={styles.nav}>
-        <button
-          onClick={() => setView('requests')}
-          style={{
-            ...styles.navLink,
-            background: view === 'requests' ? '#3b82f6' : 'transparent',
-            color: view === 'requests' ? 'white' : '#94a3b8',
-            border: 'none',
-            cursor: 'pointer'
+  const totalCount = getStatCount('pending') + getStatCount('approved') + getStatCount('rejected');
+
+  // 登录界面
+  if (!token) {
+    return (
+      <div className="login-background" style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        minHeight: '100vh',
+        padding: '20px'
+      }}>
+        <Card
+          style={{ 
+            width: 400,
+            background: 'rgba(30, 41, 59, 0.9)',
+            border: '1px solid rgba(59, 130, 246, 0.2)',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
           }}
         >
-          申请管理
-        </button>
-        {adminInfo?.role === 'super_admin' && (
-          <button
-            onClick={() => setView('admins')}
-            style={{
-              ...styles.navLink,
-              background: view === 'admins' ? '#3b82f6' : 'transparent',
-              color: view === 'admins' ? 'white' : '#94a3b8',
-              border: 'none',
-              cursor: 'pointer'
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <SafetyCertificateOutlined style={{ fontSize: 48, color: '#3b82f6', marginBottom: 16 }} />
+            <Title level={3} style={{ margin: 0, color: '#f1f5f9' }}>管理员登录</Title>
+          </div>
+          
+          <Form layout="vertical" onFinish={login}>
+            <Form.Item label="账号">
+              <Input
+                prefix={<UserOutlined />}
+                placeholder="请输入账号"
+                value={creds.username}
+                onChange={e => setCreds({ ...creds, username: e.target.value })}
+                size="large"
+              />
+            </Form.Item>
+            
+            <Form.Item label="密码">
+              <Input.Password
+                prefix={<SafetyCertificateOutlined />}
+                placeholder="请输入密码"
+                value={creds.password}
+                onChange={e => setCreds({ ...creds, password: e.target.value })}
+                onPressEnter={login}
+                size="large"
+              />
+            </Form.Item>
+            
+            <Form.Item>
+              <Button 
+                type="primary" 
+                htmlType="submit" 
+                block 
+                size="large"
+                loading={loginLoading}
+                style={{ 
+                  height: 48,
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                  border: 'none',
+                }}
+              >
+                登录
+              </Button>
+            </Form.Item>
+          </Form>
+          
+          <div style={{ textAlign: 'center' }}>
+            <Link to="/">
+              <Button type="link" icon={<HomeOutlined />}>返回首页</Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // 申请管理表格列
+  const requestColumns = [
+    {
+      title: '角色',
+      dataIndex: 'char_name',
+      key: 'char_name',
+      width: 120,
+      render: (name) => (
+        <Space>
+          <Avatar size="small" style={{ backgroundColor: '#3b82f6' }}>
+            {name?.[0]}
+          </Avatar>
+          {name}
+        </Space>
+      ),
+    },
+    {
+      title: '提交时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 160,
+      render: (text) => (
+        <Text type="secondary" style={{ fontSize: 13 }}>
+          {new Date(text).toLocaleString()}
+        </Text>
+      ),
+    },
+    {
+      title: 'zKill',
+      dataIndex: 'zkill_url',
+      key: 'zkill_url',
+      width: 80,
+      render: (url) => (
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          <LinkOutlined /> 链接
+        </a>
+      ),
+    },
+    {
+      title: '玩家备注',
+      dataIndex: 'player_comment',
+      key: 'player_comment',
+      ellipsis: true,
+      render: (text) => text || <Text type="secondary">-</Text>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 110,
+      align: 'center',
+      render: (status) => {
+        const config = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
+        return (
+          <Tag color={config.color} icon={config.icon}>
+            {config.text}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: '管理员备注',
+      dataIndex: 'admin_comment',
+      key: 'admin_comment',
+      ellipsis: true,
+      render: (text) => text || <Text type="secondary">-</Text>,
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 100,
+      align: 'center',
+      render: (_, record) => (
+        record.status === 'pending' ? (
+          <Button
+            type="primary"
+            size="small"
+            onClick={() => setReviewModal(record)}
+          >
+            审核
+          </Button>
+        ) : (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {record.reviewed_by}
+          </Text>
+        )
+      ),
+    },
+  ];
+
+  // 管理员表格列
+  const adminColumns = [
+    {
+      title: '用户名',
+      dataIndex: 'username',
+      key: 'username',
+    },
+    {
+      title: '角色',
+      dataIndex: 'role',
+      key: 'role',
+      render: (role) => (
+        <Tag color={role === 'super_admin' ? 'blue' : 'default'}>
+          {role === 'super_admin' ? '超级管理员' : '管理员'}
+        </Tag>
+      ),
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      render: (text) => new Date(text).toLocaleString(),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 100,
+      render: (_, record) => (
+        record.role !== 'super_admin' && (
+          <Popconfirm
+            title="确定要删除该管理员吗？"
+            onConfirm={() => handleDeleteAdmin(record.id)}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button type="primary" danger size="small" icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
+        )
+      ),
+    },
+  ];
+
+  const menuItems = [
+    { key: 'requests', icon: <FileTextOutlined />, label: '申请管理' },
+    ...(adminInfo?.role === 'super_admin' ? [
+      { key: 'admins', icon: <TeamOutlined />, label: '管理员设置' }
+    ] : []),
+  ];
+
+  return (
+    <Layout className="eve-background" style={{ minHeight: '100vh' }}>
+      <Header style={{ 
+        background: 'rgba(15, 17, 25, 0.95)',
+        borderBottom: '1px solid rgba(51, 65, 85, 0.5)',
+        padding: '0 24px',
+        display: 'flex',
+        alignItems: 'center',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        backdropFilter: 'blur(10px)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginRight: 48 }}>
+          <SafetyCertificateOutlined style={{ fontSize: 24, color: '#3b82f6', marginRight: 12 }} />
+          <Title level={4} style={{ margin: 0, color: '#f1f5f9' }}>SRP 管理后台</Title>
+        </div>
+        
+        <Menu
+          mode="horizontal"
+          selectedKeys={[view]}
+          items={menuItems}
+          onClick={({ key }) => setView(key)}
+          style={{ 
+            flex: 1, 
+            background: 'transparent', 
+            borderBottom: 'none',
+            minWidth: 0,
+          }}
+        />
+        
+        <Space size={16}>
+          <Avatar 
+            style={{ backgroundColor: '#8b5cf6' }} 
+            icon={<UserOutlined />}
+          />
+          <Text style={{ color: '#94a3b8' }}>
+            {adminInfo?.username} 
+            <Tag color="blue" style={{ marginLeft: 8 }}>
+              {adminInfo?.role === 'super_admin' ? '超级管理员' : '管理员'}
+            </Tag>
+          </Text>
+          <Button 
+            type="text" 
+            icon={<LogoutOutlined />} 
+            onClick={logout}
+            style={{ color: '#94a3b8' }}
+          >
+            退出
+          </Button>
+        </Space>
+      </Header>
+      
+      <Content style={{ padding: '24px', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
+        {/* 申请管理视图 */}
+        {view === 'requests' && (
+          <>
+            {/* 统计卡片 */}
+            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+              <Col xs={12} sm={6}>
+                <Card 
+                  hoverable
+                  onClick={() => { setFilter('all'); fetchRequests(token, 'all'); }}
+                  style={{ 
+                    background: filter === 'all' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(30, 41, 59, 0.6)',
+                    border: filter === 'all' ? '1px solid #3b82f6' : '1px solid rgba(51, 65, 85, 0.5)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Statistic 
+                    title={<Text type="secondary">全部</Text>}
+                    value={totalCount}
+                    valueStyle={{ color: '#f1f5f9' }}
+                  />
+                </Card>
+              </Col>
+              <Col xs={12} sm={6}>
+                <Card 
+                  hoverable
+                  onClick={() => { setFilter('pending'); fetchRequests(token, 'pending'); }}
+                  style={{ 
+                    background: filter === 'pending' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(30, 41, 59, 0.6)',
+                    border: filter === 'pending' ? '1px solid #f59e0b' : '1px solid rgba(51, 65, 85, 0.5)',
+                    borderLeft: '4px solid #f59e0b',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Statistic 
+                    title={<Text type="secondary">待审核</Text>}
+                    value={getStatCount('pending')}
+                    valueStyle={{ color: '#f59e0b' }}
+                    prefix={<ClockCircleOutlined />}
+                  />
+                </Card>
+              </Col>
+              <Col xs={12} sm={6}>
+                <Card 
+                  hoverable
+                  onClick={() => { setFilter('approved'); fetchRequests(token, 'approved'); }}
+                  style={{ 
+                    background: filter === 'approved' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(30, 41, 59, 0.6)',
+                    border: filter === 'approved' ? '1px solid #10b981' : '1px solid rgba(51, 65, 85, 0.5)',
+                    borderLeft: '4px solid #10b981',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Statistic 
+                    title={<Text type="secondary">已批准</Text>}
+                    value={getStatCount('approved')}
+                    valueStyle={{ color: '#10b981' }}
+                    prefix={<CheckCircleOutlined />}
+                  />
+                </Card>
+              </Col>
+              <Col xs={12} sm={6}>
+                <Card 
+                  hoverable
+                  onClick={() => { setFilter('rejected'); fetchRequests(token, 'rejected'); }}
+                  style={{ 
+                    background: filter === 'rejected' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(30, 41, 59, 0.6)',
+                    border: filter === 'rejected' ? '1px solid #ef4444' : '1px solid rgba(51, 65, 85, 0.5)',
+                    borderLeft: '4px solid #ef4444',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Statistic 
+                    title={<Text type="secondary">已拒绝</Text>}
+                    value={getStatCount('rejected')}
+                    valueStyle={{ color: '#ef4444' }}
+                    prefix={<CloseCircleOutlined />}
+                  />
+                </Card>
+              </Col>
+            </Row>
+
+            {/* 申请列表 */}
+            <Card
+              title={
+                <Space>
+                  <FileTextOutlined />
+                  <span>
+                    {filter === 'all' ? '全部申请' : 
+                     filter === 'pending' ? '待审核' : 
+                     filter === 'approved' ? '已批准' : '已拒绝'}
+                  </span>
+                </Space>
+              }
+              style={{ 
+                background: 'rgba(30, 41, 59, 0.6)',
+                border: '1px solid rgba(51, 65, 85, 0.5)',
+              }}
+            >
+              <Table
+                columns={requestColumns}
+                dataSource={requests}
+                rowKey="id"
+                loading={loading}
+                pagination={{ pageSize: 10 }}
+                locale={{ emptyText: <Empty description="暂无数据" /> }}
+                scroll={{ x: 900 }}
+              />
+            </Card>
+          </>
+        )}
+
+        {/* 管理员设置视图 */}
+        {view === 'admins' && (
+          <Card
+            title={
+              <Space>
+                <TeamOutlined />
+                <span>管理员管理</span>
+              </Space>
+            }
+            style={{ 
+              background: 'rgba(30, 41, 59, 0.6)',
+              border: '1px solid rgba(51, 65, 85, 0.5)',
             }}
           >
-            管理员设置
-          </button>
+            {/* 添加管理员 */}
+            <Card
+              size="small"
+              style={{ 
+                marginBottom: 24,
+                background: 'rgba(15, 17, 25, 0.4)',
+                border: '1px solid rgba(51, 65, 85, 0.5)',
+              }}
+            >
+              <Space wrap>
+                <Input
+                  placeholder="用户名"
+                  value={newAdmin.username}
+                  onChange={e => setNewAdmin({ ...newAdmin, username: e.target.value })}
+                  style={{ width: 200 }}
+                  prefix={<UserOutlined />}
+                />
+                <Input.Password
+                  placeholder="密码"
+                  value={newAdmin.password}
+                  onChange={e => setNewAdmin({ ...newAdmin, password: e.target.value })}
+                  style={{ width: 200 }}
+                />
+                <Button 
+                  type="primary" 
+                  icon={<PlusOutlined />}
+                  onClick={handleAddAdmin}
+                  style={{ background: '#10b981', borderColor: '#10b981' }}
+                >
+                  添加管理员
+                </Button>
+              </Space>
+            </Card>
+
+            {/* 管理员列表 */}
+            <Table
+              columns={adminColumns}
+              dataSource={admins}
+              rowKey="id"
+              pagination={false}
+            />
+          </Card>
         )}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <span style={{ color: '#94a3b8' }}>
-            {adminInfo?.username} ({adminInfo?.role === 'super_admin' ? '超级管理员' : '管理员'})
-          </span>
-          <button onClick={logout} style={{ ...styles.button, background: 'transparent', color: '#94a3b8' }}>
-            退出
-          </button>
-        </div>
-      </nav>
 
-      {/* 申请管理视图 */}
-      {view === 'requests' && (
-        <>
-          {/* 统计卡片 */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '20px' }}>
-            <div style={{ ...styles.card, textAlign: 'center', cursor: 'pointer' }} onClick={() => { setFilter('all'); fetchRequests(token, 'all'); }}>
-              <p style={{ color: '#64748b', marginBottom: '5px' }}>全部</p>
-              <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e293b' }}>
-                {getStatCount('pending') + getStatCount('approved') + getStatCount('rejected')}
-              </p>
-            </div>
-            <div style={{ ...styles.card, textAlign: 'center', cursor: 'pointer', borderLeft: '4px solid #f59e0b' }} onClick={() => { setFilter('pending'); fetchRequests(token, 'pending'); }}>
-              <p style={{ color: '#64748b', marginBottom: '5px' }}>待审核</p>
-              <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#f59e0b' }}>{getStatCount('pending')}</p>
-            </div>
-            <div style={{ ...styles.card, textAlign: 'center', cursor: 'pointer', borderLeft: '4px solid #10b981' }} onClick={() => { setFilter('approved'); fetchRequests(token, 'approved'); }}>
-              <p style={{ color: '#64748b', marginBottom: '5px' }}>已批准</p>
-              <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#10b981' }}>{getStatCount('approved')}</p>
-            </div>
-            <div style={{ ...styles.card, textAlign: 'center', cursor: 'pointer', borderLeft: '4px solid #ef4444' }} onClick={() => { setFilter('rejected'); fetchRequests(token, 'rejected'); }}>
-              <p style={{ color: '#64748b', marginBottom: '5px' }}>已拒绝</p>
-              <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#ef4444' }}>{getStatCount('rejected')}</p>
-            </div>
-          </div>
-
-          {/* 申请列表 */}
-          <div style={styles.card}>
-            <h3 style={{ marginBottom: '15px' }}>
-              {filter === 'all' ? '全部申请' : filter === 'pending' ? '待审核' : filter === 'approved' ? '已批准' : '已拒绝'}
-            </h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#f1f5f9' }}>
-                    <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>角色</th>
-                    <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>提交时间</th>
-                    <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>zKill</th>
-                    <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>玩家备注</th>
-                    <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #e2e8f0' }}>状态</th>
-                    <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>管理员备注</th>
-                    <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #e2e8f0' }}>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {requests.map(req => {
-                    const statusInfo = STATUS_MAP[req.status] || STATUS_MAP.pending;
-                    return (
-                      <tr key={req.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '12px' }}>{req.char_name}</td>
-                        <td style={{ padding: '12px', fontSize: '13px', color: '#64748b' }}>
-                          {new Date(req.created_at).toLocaleString()}
-                        </td>
-                        <td style={{ padding: '12px' }}>
-                          <a href={req.zkill_url} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>
-                            链接
-                          </a>
-                        </td>
-                        <td style={{ padding: '12px', maxWidth: '200px', color: '#64748b' }}>
-                          {req.player_comment || '-'}
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}>
-                          <span style={{
-                            padding: '4px 12px',
-                            borderRadius: '20px',
-                            fontSize: '12px',
-                            fontWeight: '500',
-                            color: statusInfo.color,
-                            background: statusInfo.bg
-                          }}>
-                            {statusInfo.text}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px', maxWidth: '200px' }}>
-                          {req.admin_comment || '-'}
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}>
-                          {req.status === 'pending' ? (
-                            <button
-                              onClick={() => setReviewModal(req)}
-                              style={{ ...styles.button, ...styles.primaryBtn, padding: '6px 12px', fontSize: '12px' }}
-                            >
-                              审核
-                            </button>
-                          ) : (
-                            <span style={{ color: '#9ca3af', fontSize: '12px' }}>
-                              {req.reviewed_by}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {requests.length === 0 && (
-                    <tr>
-                      <td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>
-                        暂无数据
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* 管理员设置视图 */}
-      {view === 'admins' && (
-        <div style={styles.card}>
-          <h3 style={{ marginBottom: '20px' }}>管理员管理</h3>
-
-          {/* 添加管理员 */}
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
-            <input
-              placeholder="用户名"
-              value={newAdmin.username}
-              onChange={e => setNewAdmin({ ...newAdmin, username: e.target.value })}
-              style={{ ...styles.input, width: '200px' }}
-            />
-            <input
-              type="password"
-              placeholder="密码"
-              value={newAdmin.password}
-              onChange={e => setNewAdmin({ ...newAdmin, password: e.target.value })}
-              style={{ ...styles.input, width: '200px' }}
-            />
-            <button onClick={handleAddAdmin} style={{ ...styles.button, ...styles.successBtn }}>
-              添加管理员
-            </button>
-          </div>
-
-          {/* 管理员列表 */}
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f1f5f9' }}>
-                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>用户名</th>
-                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>角色</th>
-                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>创建时间</th>
-                <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #e2e8f0' }}>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {admins.map(admin => (
-                <tr key={admin.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ padding: '12px' }}>{admin.username}</td>
-                  <td style={{ padding: '12px' }}>
-                    <span style={{
-                      padding: '4px 12px',
-                      borderRadius: '20px',
-                      fontSize: '12px',
-                      background: admin.role === 'super_admin' ? '#dbeafe' : '#f1f5f9',
-                      color: admin.role === 'super_admin' ? '#2563eb' : '#64748b'
-                    }}>
-                      {admin.role === 'super_admin' ? '超级管理员' : '管理员'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px', color: '#64748b' }}>
-                    {new Date(admin.created_at).toLocaleString()}
-                  </td>
-                  <td style={{ padding: '12px', textAlign: 'center' }}>
-                    {admin.role !== 'super_admin' && (
-                      <button
-                        onClick={() => handleDeleteAdmin(admin.id)}
-                        style={{ ...styles.button, ...styles.dangerBtn, padding: '6px 12px', fontSize: '12px' }}
-                      >
-                        删除
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* 审核弹窗 */}
-      {reviewModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{ ...styles.card, width: '500px', maxWidth: '90%' }}>
-            <h3 style={{ marginBottom: '15px' }}>审核申请</h3>
-            <p><strong>角色:</strong> {reviewModal.char_name}</p>
-            <p><strong>zKill:</strong> <a href={reviewModal.zkill_url} target="_blank" rel="noopener noreferrer">{reviewModal.zkill_url}</a></p>
-            <p><strong>玩家备注:</strong> {reviewModal.player_comment || '无'}</p>
-
-            <div style={{ marginTop: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                管理员建议/备注:
-              </label>
-              <textarea
-                value={adminComment}
-                onChange={e => setAdminComment(e.target.value)}
-                placeholder="可选：输入给玩家的反馈信息..."
-                style={{ ...styles.input, minHeight: '100px', resize: 'vertical' }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => { setReviewModal(null); setAdminComment(''); }}
-                style={{ ...styles.button, background: '#e2e8f0', color: '#374151' }}
-              >
-                取消
-              </button>
-              <button
-                onClick={() => handleReview('reject')}
-                style={{ ...styles.button, ...styles.dangerBtn }}
-              >
-                拒绝
-              </button>
-              <button
-                onClick={() => handleReview('approve')}
-                style={{ ...styles.button, ...styles.successBtn }}
-              >
-                批准
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+        {/* 审核弹窗 */}
+        <Modal
+          title={
+            <Space>
+              <FileTextOutlined />
+              <span>审核申请</span>
+            </Space>
+          }
+          open={!!reviewModal}
+          onCancel={() => { setReviewModal(null); setAdminComment(''); }}
+          footer={[
+            <Button key="cancel" onClick={() => { setReviewModal(null); setAdminComment(''); }}>
+              取消
+            </Button>,
+            <Button 
+              key="reject" 
+              danger 
+              icon={<CloseCircleOutlined />}
+              onClick={() => handleReview('reject')}
+            >
+              拒绝
+            </Button>,
+            <Button 
+              key="approve" 
+              type="primary"
+              icon={<CheckCircleOutlined />}
+              onClick={() => handleReview('approve')}
+              style={{ background: '#10b981', borderColor: '#10b981' }}
+            >
+              批准
+            </Button>,
+          ]}
+          width={520}
+        >
+          {reviewModal && (
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              <Card size="small" style={{ background: 'rgba(15, 17, 25, 0.4)' }}>
+                <Space direction="vertical" size={8}>
+                  <Text><UserOutlined style={{ marginRight: 8 }} />角色: <Text strong>{reviewModal.char_name}</Text></Text>
+                  <Text>
+                    <LinkOutlined style={{ marginRight: 8 }} />
+                    zKill: <a href={reviewModal.zkill_url} target="_blank" rel="noopener noreferrer">{reviewModal.zkill_url}</a>
+                  </Text>
+                  <Text><FileTextOutlined style={{ marginRight: 8 }} />玩家备注: {reviewModal.player_comment || '无'}</Text>
+                </Space>
+              </Card>
+              
+              <div>
+                <Text style={{ marginBottom: 8, display: 'block' }}>管理员建议/备注:</Text>
+                <TextArea
+                  value={adminComment}
+                  onChange={e => setAdminComment(e.target.value)}
+                  placeholder="可选：输入给玩家的反馈信息..."
+                  rows={4}
+                />
+              </div>
+            </Space>
+          )}
+        </Modal>
+      </Content>
+    </Layout>
   );
 }
 
