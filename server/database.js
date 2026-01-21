@@ -55,11 +55,34 @@ function initializeDatabase() {
     // 检查是否存在默认管理员，不存在则创建
     const adminExists = db.prepare('SELECT COUNT(*) as count FROM admins').get();
     if (adminExists.count === 0) {
-        const defaultPassword = 'admin123';  // 请在生产环境中修改！
+        // 生成随机强密码
+        const crypto = require('crypto');
+        const generateStrongPassword = () => {
+            const length = 16;
+            const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+            let password = '';
+            const randomBytes = crypto.randomBytes(length);
+            for (let i = 0; i < length; i++) {
+                password += charset[randomBytes[i] % charset.length];
+            }
+            // 确保包含各种字符类型
+            password = password.slice(0, -4) + 'Aa1!';
+            return password;
+        };
+        
+        const defaultPassword = generateStrongPassword();
         const hashedPassword = bcrypt.hashSync(defaultPassword, 10);
         db.prepare('INSERT INTO admins (username, password_hash, role) VALUES (?, ?, ?)')
             .run('admin', hashedPassword, 'super_admin');
-        console.log('已创建默认管理员账号: admin / admin123 (请尽快修改密码)');
+        
+        console.log('\n' + '='.repeat(60));
+        console.log('⚠️  首次启动 - 已创建默认超级管理员账号');
+        console.log('='.repeat(60));
+        console.log(`   用户名: admin`);
+        console.log(`   密码: ${defaultPassword}`);
+        console.log('='.repeat(60));
+        console.log('⚠️  请立即登录并修改密码！此密码只显示一次！');
+        console.log('='.repeat(60) + '\n');
     }
 }
 

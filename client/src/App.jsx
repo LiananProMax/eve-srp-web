@@ -51,6 +51,62 @@ const API_BASE = 'http://localhost:3001/api';
 const EVE_CLIENT_ID = 'daa4dbb782144ccdb1d0ac87a33acccb';
 const REDIRECT_URI = 'http://localhost:5173/auth/callback';
 
+// === 创建带认证的 axios 实例 ===
+const createAuthAxios = (tokenKey = 'user') => {
+  const instance = axios.create({ baseURL: API_BASE });
+  
+  instance.interceptors.request.use((config) => {
+    try {
+      const stored = localStorage.getItem(tokenKey);
+      if (stored) {
+        let token;
+        if (tokenKey === 'user') {
+          // user 存储的是 JSON 对象 { charId, charName, token }
+          const data = JSON.parse(stored);
+          token = data.token;
+        } else {
+          // adminToken 存储的是纯 token 字符串
+          token = stored;
+        }
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } catch (e) {
+      console.error('Token parsing error:', e);
+      localStorage.removeItem(tokenKey);
+    }
+    return config;
+  });
+  
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      // 只在认证失败时自动跳转，不要在其他错误时跳转
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        // 检查是否是 token 相关的错误
+        const errorMsg = error.response?.data?.error || '';
+        if (errorMsg.includes('token') || errorMsg.includes('Token') || errorMsg.includes('凭证')) {
+          localStorage.removeItem(tokenKey);
+          if (tokenKey === 'user') {
+            window.location.href = '/';
+          } else {
+            window.location.href = '/admin';
+          }
+        }
+      }
+      return Promise.reject(error);
+    }
+  );
+  
+  return instance;
+};
+
+// 用户 API 实例
+const userApi = createAuthAxios('user');
+// 管理员 API 实例  
+const adminApi = createAuthAxios('adminToken');
+
 // 状态配置
 const STATUS_CONFIG = {
   pending: { text: '待审核', color: 'warning', icon: <ClockCircleOutlined /> },
@@ -143,7 +199,12 @@ function AuthCallback() {
       hasRequested.current = true;
       axios.post(`${API_BASE}/auth/eve`, { code })
         .then(res => {
-          localStorage.setItem('user', JSON.stringify(res.data));
+          // 存储用户信息和 JWT token
+          localStorage.setItem('user', JSON.stringify({
+            charId: res.data.charId,
+            charName: res.data.charName,
+            token: res.data.token  // 存储 JWT token
+          }));
           message.success('登录成功！');
           navigate('/dashboard');
         })
@@ -264,11 +325,11 @@ function Dashboard() {
   const [comment, setComment] = useState('');
 
   useEffect(() => {
-    if (!user?.charId) {
+    if (!user?.charId || !user?.token) {
       navigate('/');
       return;
     }
-    axios.get(`${API_BASE}/losses/${user.charId}`)
+    userApi.get(`/losses/${user.charId}`)
       .then(res => setLosses(res.data))
       .catch(err => {
         console.error(err);
@@ -288,9 +349,8 @@ function Dashboard() {
     
     setSubmitting(selectedLoss.killmail_id);
     try {
-      await axios.post(`${API_BASE}/srp`, {
-        charId: user.charId,
-        charName: user.charName,
+      // 不再需要发送 charId 和 charName，服务端从 token 中获取
+      await userApi.post('/srp', {
         lossMail: selectedLoss,
         comment
       });
@@ -434,11 +494,11 @@ function MyRequests() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user?.charId) {
+    if (!user?.charId || !user?.token) {
       navigate('/');
       return;
     }
-    axios.get(`${API_BASE}/srp/my/${user.charId}`)
+    userApi.get(`/srp/my/${user.charId}`)
       .then(res => setRequests(res.data))
       .catch(err => {
         console.error(err);
@@ -573,7 +633,12 @@ function Admin() {
       message.success('登录成功');
       fetchRequests(res.data.token);
     } catch (err) {
-      message.error('登录失败: ' + (err.response?.data?.error || '用户名或密码错误'));
+      // 处理速率限制错误
+      if (err.response?.status === 429) {
+        message.error(err.response.data?.error || '登录尝试次数过多，请稍后再试');
+      } else {
+        message.error('登录失败: ' + (err.response?.data?.error || '用户名或密码错误'));
+      }
     } finally {
       setLoginLoading(false);
     }
@@ -589,14 +654,13 @@ function Admin() {
   const fetchRequests = async (t, statusFilter = 'all') => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/admin/requests`, {
-        headers: { Authorization: `Bearer ${t}` },
+      const res = await adminApi.get('/admin/requests', {
         params: { status: statusFilter }
       });
       setRequests(res.data.requests);
       setStats(res.data.stats);
     } catch (err) {
-      if (err.response?.status === 403) {
+      if (err.response?.status === 403 || err.response?.status === 401) {
         logout();
       }
     } finally {
@@ -606,9 +670,7 @@ function Admin() {
 
   const fetchAdmins = async () => {
     try {
-      const res = await axios.get(`${API_BASE}/admin/admins`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await adminApi.get('/admin/admins');
       setAdmins(res.data);
     } catch (err) {
       console.error(err);
@@ -617,17 +679,17 @@ function Admin() {
 
   const handleReview = async (action) => {
     try {
-      await axios.post(`${API_BASE}/admin/review`, {
+      await adminApi.post('/admin/review', {
         id: reviewModal.id,
         action,
         adminComment
-      }, { headers: { Authorization: `Bearer ${token}` } });
+      });
       message.success(action === 'approve' ? '已批准' : '已拒绝');
       setReviewModal(null);
       setAdminComment('');
       fetchRequests(token, filter);
     } catch (err) {
-      message.error('操作失败');
+      message.error('操作失败: ' + (err.response?.data?.error || '未知错误'));
     }
   };
 
@@ -637,22 +699,24 @@ function Admin() {
       return;
     }
     try {
-      await axios.post(`${API_BASE}/admin/admins`, newAdmin, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await adminApi.post('/admin/admins', newAdmin);
       setNewAdmin({ username: '', password: '' });
       fetchAdmins();
       message.success('添加成功');
     } catch (err) {
-      message.error('添加失败: ' + (err.response?.data?.error || '未知错误'));
+      // 显示密码强度错误详情
+      const details = err.response?.data?.details;
+      if (details && Array.isArray(details)) {
+        message.error('添加失败: ' + details.join(', '));
+      } else {
+        message.error('添加失败: ' + (err.response?.data?.error || '未知错误'));
+      }
     }
   };
 
   const handleDeleteAdmin = async (id) => {
     try {
-      await axios.delete(`${API_BASE}/admin/admins/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await adminApi.delete(`/admin/admins/${id}`);
       fetchAdmins();
       message.success('删除成功');
     } catch (err) {
