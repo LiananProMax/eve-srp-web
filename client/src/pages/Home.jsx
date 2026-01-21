@@ -55,6 +55,11 @@ export default function Home() {
   };
 
   const fetchKills = async () => {
+    // 等待 config 加载完成
+    if (!config.corpId) {
+      return;
+    }
+    
     try {
       setError(null);
       
@@ -185,10 +190,12 @@ export default function Home() {
   };
 
   useEffect(() => {
-    fetchKills();
-    const interval = setInterval(fetchKills, 5 * 60 * 1000); // 每5分钟刷新
-    return () => clearInterval(interval);
-  }, []);
+    if (config.corpId) {
+      fetchKills();
+      const interval = setInterval(fetchKills, 5 * 60 * 1000); // 每5分钟刷新
+      return () => clearInterval(interval);
+    }
+  }, [config.corpId]);
 
   return (
     <>

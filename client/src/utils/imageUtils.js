@@ -86,6 +86,16 @@ export function getCharacterPortraitUrl(characterId, size = 256) {
 }
 
 /**
+ * 获取角色头像URL（别名，与 getCharacterPortraitUrl 相同）
+ * @param {number} charId 角色ID
+ * @param {number} size 图片尺寸(32, 64, 128, 256, 512, 1024)
+ * @returns {string} 图片URL
+ */
+export function getCharacterAvatarUrl(charId, size = 64) {
+  return `https://images.evetech.net/characters/${charId}/portrait?size=${size}`;
+}
+
+/**
  * 获取军团Logo URL
  * @param {number} corporationId 军团ID
  * @param {number} size 图片尺寸(32, 64, 128, 256)
