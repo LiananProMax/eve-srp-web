@@ -23,6 +23,7 @@ import {
   PlusOutlined,
   RocketOutlined,
   HomeOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useConfig } from '../../contexts/ConfigContext';
@@ -46,7 +47,7 @@ function UserLayout({ children }) {
   const { t } = useLanguage();
   const { config } = useConfig();
   const corpLogoUrl = getCorporationLogoUrl(config.corpId, 64);
-
+  
   const handleLogout = () => {
     clearAllUsers();
     // 清除所有角色的缓存
@@ -61,6 +62,8 @@ function UserLayout({ children }) {
     { key: '/', icon: <HomeOutlined />, label: t?.nav?.home || '首页' },
     { key: '/dashboard', icon: <PlusOutlined />, label: t?.nav?.srp || '补损申请' },
     { key: '/my-requests', icon: <FileTextOutlined />, label: t?.nav?.myRequests || '我的申请' },
+    // 管理员入口始终可见
+    { key: '/admin', icon: <SettingOutlined />, label: t?.nav?.admin || '管理后台' },
   ];
 
   // 用户下拉菜单项

@@ -51,6 +51,7 @@ import { getCorporationLogoUrl } from '../../utils/imageUtils';
 import { formatISK, parseISK } from '../../utils/formatters';
 import { API_BASE, adminApi } from '../../api';
 import { STATUS_CONFIG } from '../../constants/status';
+import { hasLoggedInUsers } from '../../utils/userStorage';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -528,6 +529,21 @@ function Admin() {
         />
         
         <Space size={16}>
+          {/* 如果有用户登录，显示切换到用户面板的按钮 */}
+          {hasLoggedInUsers() && (
+            <Link to="/dashboard">
+              <Button 
+                type="default" 
+                icon={<RocketOutlined />}
+                style={{ 
+                  borderColor: '#10b981', 
+                  color: '#10b981',
+                }}
+              >
+                {t.admin.userPanel || '用户面板'}
+              </Button>
+            </Link>
+          )}
           <Avatar 
             style={{ backgroundColor: '#8b5cf6' }} 
             icon={<UserOutlined />}

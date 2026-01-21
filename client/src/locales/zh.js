@@ -187,6 +187,7 @@ export default {
     delete: '删除',
     confirmDelete: '确定要删除该管理员吗？',
     confirm: '确定',
+    userPanel: '用户面板',
   },
 
   // 导航
@@ -194,5 +195,6 @@ export default {
     home: '首页',
     srp: '补损申请',
     myRequests: '我的申请',
+    admin: '管理后台',
   },
 };

@@ -187,6 +187,7 @@ export default {
     delete: 'Delete',
     confirmDelete: 'Are you sure you want to delete this admin?',
     confirm: 'Confirm',
+    userPanel: 'User Panel',
   },
 
   // 导航
@@ -194,5 +195,6 @@ export default {
     home: 'Home',
     srp: 'SRP',
     myRequests: 'My Requests',
+    admin: 'Admin',
   },
 };
