@@ -43,6 +43,7 @@ import {
   LoginOutlined,
   HomeOutlined,
   EditOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { ConfigProvider, useConfig } from './contexts/ConfigContext';
@@ -135,7 +136,24 @@ const STATUS_CONFIG = {
 function SRPLogin() {
   const { t } = useLanguage();
   const { config } = useConfig();
+  const navigate = useNavigate();
   const corpLogoUrl = getCorporationLogoUrl(config.corpId, 128);
+  
+  // 检查是否已登录，如果已登录则跳转到 dashboard
+  useEffect(() => {
+    const stored = localStorage.getItem('user');
+    if (stored) {
+      try {
+        const user = JSON.parse(stored);
+        if (user?.charId && user?.token) {
+          navigate('/dashboard');
+        }
+      } catch (e) {
+        // 解析失败，清除无效数据
+        localStorage.removeItem('user');
+      }
+    }
+  }, [navigate]);
   
   const handleLogin = () => {
     if (!config.eveClientId || !config.callbackUrl) {
@@ -370,30 +388,87 @@ function UserLayout({ children }) {
   );
 }
 
+// 缓存键名
+const LOSSES_CACHE_KEY = 'srp_losses_cache';
+const LOSSES_CACHE_EXPIRY = 10 * 60 * 1000; // 缓存10分钟
+const INITIAL_DISPLAY_COUNT = 15; // 初始显示数量 (3行 x 5列)
+const LOAD_MORE_COUNT = 15; // 每次加载更多的数量
+
 // 4. 用户面板：选择损失
 function Dashboard() {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const navigate = useNavigate();
   const [losses, setLosses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedLoss, setSelectedLoss] = useState(null);
   const [comment, setComment] = useState('');
+  const [lastFetchTime, setLastFetchTime] = useState(null);
+  const [displayCount, setDisplayCount] = useState(INITIAL_DISPLAY_COUNT);
   const { t } = useLanguage();
+
+  // 从 API 获取损失数据
+  const fetchLosses = async (showRefreshMessage = false) => {
+    if (!user?.charId) return;
+    
+    try {
+      const res = await userApi.get(`/losses/${user.charId}`);
+      setLosses(res.data);
+      
+      // 保存到缓存
+      const cacheData = {
+        charId: user.charId,
+        data: res.data,
+        timestamp: Date.now()
+      };
+      sessionStorage.setItem(LOSSES_CACHE_KEY, JSON.stringify(cacheData));
+      setLastFetchTime(new Date());
+      
+      if (showRefreshMessage) {
+        message.success('损失记录已刷新');
+      }
+    } catch (err) {
+      console.error(err);
+      message.error('获取损失记录失败');
+    }
+  };
+
+  // 手动刷新
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchLosses(true);
+    setDisplayCount(INITIAL_DISPLAY_COUNT); // 重置显示数量
+    setRefreshing(false);
+  };
 
   useEffect(() => {
     if (!user?.charId || !user?.token) {
       navigate('/srp');
       return;
     }
-    userApi.get(`/losses/${user.charId}`)
-      .then(res => setLosses(res.data))
-      .catch(err => {
-        console.error(err);
-        message.error('获取损失记录失败');
-      })
-      .finally(() => setLoading(false));
+    
+    // 检查缓存
+    const cached = sessionStorage.getItem(LOSSES_CACHE_KEY);
+    if (cached) {
+      try {
+        const cacheData = JSON.parse(cached);
+        // 验证缓存是否属于当前用户且未过期
+        if (cacheData.charId === user.charId && 
+            Date.now() - cacheData.timestamp < LOSSES_CACHE_EXPIRY) {
+          setLosses(cacheData.data);
+          setLastFetchTime(new Date(cacheData.timestamp));
+          setLoading(false);
+          return;
+        }
+      } catch (e) {
+        sessionStorage.removeItem(LOSSES_CACHE_KEY);
+      }
+    }
+    
+    // 无缓存或缓存过期，从 API 获取
+    fetchLosses().finally(() => setLoading(false));
   }, []);
 
   const openSubmitModal = (loss) => {
@@ -431,7 +506,24 @@ function Dashboard() {
             <span>{t.srp.applyTitle}</span>
           </Space>
         }
-        extra={<Text type="secondary">{t.srp.applyDesc}</Text>}
+        extra={
+          <Space>
+            {lastFetchTime && (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {t.srp.lastUpdate || '上次更新'}: {lastFetchTime.toLocaleTimeString()}
+              </Text>
+            )}
+            <Tooltip title={t.srp.refreshLosses || '刷新损失记录'}>
+              <Button
+                type="text"
+                icon={<ReloadOutlined spin={refreshing} />}
+                onClick={handleRefresh}
+                loading={refreshing}
+                disabled={loading}
+              />
+            </Tooltip>
+          </Space>
+        }
         style={{ 
           background: 'rgba(30, 41, 59, 0.6)',
           border: '1px solid rgba(51, 65, 85, 0.5)',
@@ -448,58 +540,77 @@ function Dashboard() {
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         ) : (
-          <Row gutter={[16, 16]}>
-            {losses.map(loss => (
-              <Col xs={24} sm={12} lg={8} key={loss.killmail_id}>
-                <Card
-                  size="small"
-                  style={{ 
-                    background: 'rgba(15, 17, 25, 0.6)',
-                    border: '1px solid rgba(51, 65, 85, 0.5)',
-                  }}
-                  actions={[
-                    <Tooltip title="在 zKillboard 查看详情" key="link">
-                      <a
-                        href={`https://zkillboard.com/kill/${loss.killmail_id}/`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+          <>
+            <Row gutter={[16, 16]}>
+              {losses.slice(0, displayCount).map(loss => (
+                <Col xs={24} sm={12} lg={8} key={loss.killmail_id}>
+                  <Card
+                    size="small"
+                    style={{ 
+                      background: 'rgba(15, 17, 25, 0.6)',
+                      border: '1px solid rgba(51, 65, 85, 0.5)',
+                    }}
+                    actions={[
+                      <Tooltip title="在 zKillboard 查看详情" key="link">
+                        <a
+                          href={`https://zkillboard.com/kill/${loss.killmail_id}/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <LinkOutlined /> 详情
+                        </a>
+                      </Tooltip>,
+                      <Button
+                        key="submit"
+                        type="link"
+                        onClick={() => openSubmitModal(loss)}
+                        loading={submitting === loss.killmail_id}
                       >
-                        <LinkOutlined /> 详情
-                      </a>
-                    </Tooltip>,
-                    <Button
-                      key="submit"
-                      type="link"
-                      onClick={() => openSubmitModal(loss)}
-                      loading={submitting === loss.killmail_id}
-                    >
-                      <PlusOutlined /> 申请
-                    </Button>
-                  ]}
+                        <PlusOutlined /> 申请
+                      </Button>
+                    ]}
+                  >
+                    <Card.Meta
+                      title={
+                        <Space>
+                          <RocketOutlined style={{ color: '#3b82f6' }} />
+                          <span>{t.srp.shipId}: {loss.ship_type_id}</span>
+                        </Space>
+                      }
+                      description={
+                        <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                          <Text type="secondary">
+                            <ClockCircleOutlined style={{ marginRight: 8 }} />
+                            {new Date(loss.killmail_time).toLocaleString()}
+                          </Text>
+                          <Text style={{ color: '#f59e0b' }}>
+                            {t.srp.lossValue}: {loss.zkb?.totalValue ? formatISK(Math.round(loss.zkb.totalValue)) : '未知'} ISK
+                          </Text>
+                        </Space>
+                      }
+                    />
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+            
+            {/* 加载更多 / 显示信息 */}
+            <div style={{ textAlign: 'center', marginTop: 24 }}>
+              {displayCount < losses.length ? (
+                <Button 
+                  type="dashed" 
+                  onClick={() => setDisplayCount(prev => prev + LOAD_MORE_COUNT)}
+                  style={{ width: 200 }}
                 >
-                  <Card.Meta
-                    title={
-                      <Space>
-                        <RocketOutlined style={{ color: '#3b82f6' }} />
-                        <span>{t.srp.shipId}: {loss.ship_type_id}</span>
-                      </Space>
-                    }
-                    description={
-                      <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                        <Text type="secondary">
-                          <ClockCircleOutlined style={{ marginRight: 8 }} />
-                          {new Date(loss.killmail_time).toLocaleString()}
-                        </Text>
-                        <Text style={{ color: '#f59e0b' }}>
-                          {t.srp.lossValue}: {(loss.zkb?.totalValue / 1000000)?.toFixed(2) || '未知'} M ISK
-                        </Text>
-                      </Space>
-                    }
-                  />
-                </Card>
-              </Col>
-            ))}
-          </Row>
+                  {t.srp.loadMore || '加载更多'} ({losses.length - displayCount} {t.srp.remaining || '条剩余'})
+                </Button>
+              ) : (
+                <Text type="secondary">
+                  {t.srp.showingAll || '已显示全部'} {losses.length} {t.srp.records || '条记录'}
+                </Text>
+              )}
+            </div>
+          </>
         )}
       </Card>
 
@@ -524,7 +635,7 @@ function Dashboard() {
               <Space direction="vertical" size={4}>
                 <Text>{t.srp.shipId}: <Text strong>{selectedLoss.ship_type_id}</Text></Text>
                 <Text>击杀时间: <Text type="secondary">{new Date(selectedLoss.killmail_time).toLocaleString()}</Text></Text>
-                <Text>{t.srp.lossValue}: <Text style={{ color: '#f59e0b' }}>{(selectedLoss.zkb?.totalValue / 1000000)?.toFixed(2) || '未知'} M ISK</Text></Text>
+                <Text>{t.srp.lossValue}: <Text style={{ color: '#f59e0b' }}>{selectedLoss.zkb?.totalValue ? formatISK(Math.round(selectedLoss.zkb.totalValue)) : '未知'} ISK</Text></Text>
               </Space>
             </Card>
             <div>
