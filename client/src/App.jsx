@@ -42,18 +42,18 @@ import {
   LoginOutlined,
   HomeOutlined,
 } from '@ant-design/icons';
+import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
+import { ConfigProvider, useConfig } from './contexts/ConfigContext';
+import { getCorporationLogoUrl } from './utils/imageUtils';
+import Home from './pages/Home';
 
 const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
 // === 环境配置 ===
-// 生产环境使用相对路径（通过反向代理），开发环境使用本地地址
 const isDev = import.meta.env.DEV;
 const API_BASE = isDev ? 'http://localhost:3001/api' : '/api';
-const EVE_CLIENT_ID = 'daa4dbb782144ccdb1d0ac87a33acccb';
-// 动态获取回调地址，支持任意域名部署
-const REDIRECT_URI = `${window.location.origin}/auth/callback`;
 
 // === 创建带认证的 axios 实例 ===
 const createAuthAxios = (tokenKey = 'user') => {
@@ -65,11 +65,9 @@ const createAuthAxios = (tokenKey = 'user') => {
       if (stored) {
         let token;
         if (tokenKey === 'user') {
-          // user 存储的是 JSON 对象 { charId, charName, token }
           const data = JSON.parse(stored);
           token = data.token;
         } else {
-          // adminToken 存储的是纯 token 字符串
           token = stored;
         }
         if (token) {
@@ -86,14 +84,12 @@ const createAuthAxios = (tokenKey = 'user') => {
   instance.interceptors.response.use(
     (response) => response,
     (error) => {
-      // 只在认证失败时自动跳转，不要在其他错误时跳转
       if (error.response?.status === 401 || error.response?.status === 403) {
-        // 检查是否是 token 相关的错误
         const errorMsg = error.response?.data?.error || '';
         if (errorMsg.includes('token') || errorMsg.includes('Token') || errorMsg.includes('凭证')) {
           localStorage.removeItem(tokenKey);
           if (tokenKey === 'user') {
-            window.location.href = '/';
+            window.location.href = '/srp';
           } else {
             window.location.href = '/admin';
           }
@@ -106,9 +102,7 @@ const createAuthAxios = (tokenKey = 'user') => {
   return instance;
 };
 
-// 用户 API 实例
 const userApi = createAuthAxios('user');
-// 管理员 API 实例  
 const adminApi = createAuthAxios('adminToken');
 
 // 状态配置
@@ -118,10 +112,18 @@ const STATUS_CONFIG = {
   rejected: { text: '已拒绝', color: 'error', icon: <CloseCircleOutlined /> }
 };
 
-// 1. 登录页
-function Login() {
+// 1. SRP 登录页
+function SRPLogin() {
+  const { t } = useLanguage();
+  const { config } = useConfig();
+  const corpLogoUrl = getCorporationLogoUrl(config.corpId, 128);
+  
   const handleLogin = () => {
-    const url = `https://login.eveonline.com/v2/oauth/authorize/?response_type=code&redirect_uri=${REDIRECT_URI}&client_id=${EVE_CLIENT_ID}&state=srp_login`;
+    if (!config.eveClientId || !config.callbackUrl) {
+      console.error('SSO 配置未加载');
+      return;
+    }
+    const url = `https://login.eveonline.com/v2/oauth/authorize/?response_type=code&redirect_uri=${encodeURIComponent(config.callbackUrl)}&client_id=${config.eveClientId}&state=srp_login`;
     window.location.href = url;
   };
 
@@ -143,20 +145,34 @@ function Login() {
         }}
         styles={{ body: { padding: '48px 32px' } }}
       >
-        <div style={{ marginBottom: 24 }}>
-          <RocketOutlined style={{ fontSize: 64, color: '#3b82f6', marginBottom: 16 }} />
+        <div style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <img 
+            src={corpLogoUrl} 
+            alt={config.corpName}
+            style={{ 
+              width: 80, 
+              height: 80, 
+              borderRadius: '50%', 
+              border: '3px solid #3b82f6',
+              marginBottom: 16,
+              boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)'
+            }}
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
           <Title level={2} style={{ margin: 0, color: '#f1f5f9' }}>
-            军团补损系统
+            {t.srp.loginTitle}
           </Title>
           <Text type="secondary" style={{ fontSize: 16 }}>
-            Ship Replacement Program
+            {t.srp.loginSubtitle}
           </Text>
         </div>
         
         <Divider style={{ borderColor: 'rgba(148, 163, 184, 0.2)' }} />
         
         <Paragraph style={{ color: '#94a3b8', marginBottom: 32 }}>
-          使用 EVE Online 账号登录，查看并提交补损申请
+          {t.srp.loginDesc}
         </Paragraph>
         
         <Button
@@ -173,18 +189,25 @@ function Login() {
             border: 'none',
           }}
         >
-          使用 EVE SSO 登录
+          {t.srp.loginButton}
         </Button>
         
         <Divider style={{ borderColor: 'rgba(148, 163, 184, 0.2)' }}>
           <Text type="secondary" style={{ fontSize: 12 }}>其他入口</Text>
         </Divider>
         
-        <Link to="/admin">
-          <Button type="link" icon={<SettingOutlined />}>
-            管理员入口
-          </Button>
-        </Link>
+        <Space>
+          <Link to="/">
+            <Button type="link" icon={<HomeOutlined />}>
+              {t.nav.home}
+            </Button>
+          </Link>
+          <Link to="/admin">
+            <Button type="link" icon={<SettingOutlined />}>
+              {t.srp.adminEntry}
+            </Button>
+          </Link>
+        </Space>
       </Card>
     </div>
   );
@@ -198,16 +221,14 @@ function AuthCallback() {
   const hasRequested = useRef(false);
 
   useEffect(() => {
-    // 防止 React 18 严格模式下重复发送请求（code 只能使用一次）
     if (code && !hasRequested.current) {
       hasRequested.current = true;
       axios.post(`${API_BASE}/auth/eve`, { code })
         .then(res => {
-          // 存储用户信息和 JWT token
           localStorage.setItem('user', JSON.stringify({
             charId: res.data.charId,
             charName: res.data.charName,
-            token: res.data.token  // 存储 JWT token
+            token: res.data.token
           }));
           message.success('登录成功！');
           navigate('/dashboard');
@@ -215,7 +236,7 @@ function AuthCallback() {
         .catch(err => {
           localStorage.removeItem('user');
           message.error('登录失败：' + (err.response?.data?.error || '非本军团成员'));
-          navigate('/');
+          navigate('/srp');
         });
     }
   }, [code, navigate]);
@@ -248,16 +269,18 @@ function UserLayout({ children }) {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useLanguage();
 
   const handleLogout = () => {
     localStorage.removeItem('user');
     message.info('已退出登录');
-    navigate('/');
+    navigate('/srp');
   };
 
   const menuItems = [
-    { key: '/dashboard', icon: <PlusOutlined />, label: '申请补损' },
-    { key: '/my-requests', icon: <FileTextOutlined />, label: '我的申请' },
+    { key: '/', icon: <HomeOutlined />, label: t.nav.home },
+    { key: '/dashboard', icon: <PlusOutlined />, label: t.nav.srp },
+    { key: '/my-requests', icon: <FileTextOutlined />, label: t.nav.myRequests },
   ];
 
   return (
@@ -275,7 +298,7 @@ function UserLayout({ children }) {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', marginRight: 48 }}>
           <RocketOutlined style={{ fontSize: 24, color: '#3b82f6', marginRight: 12 }} />
-          <Title level={4} style={{ margin: 0, color: '#f1f5f9' }}>SRP 系统</Title>
+          <Title level={4} style={{ margin: 0, color: '#f1f5f9' }}>{t.srp.srpSystem}</Title>
         </div>
         
         <Menu
@@ -297,7 +320,7 @@ function UserLayout({ children }) {
             icon={<UserOutlined />}
           />
           <Text style={{ color: '#94a3b8' }}>
-            欢迎, <Text strong style={{ color: '#f1f5f9' }}>{user.charName}</Text>
+            {t.srp.welcome}, <Text strong style={{ color: '#f1f5f9' }}>{user.charName}</Text>
           </Text>
           <Button 
             type="text" 
@@ -305,7 +328,7 @@ function UserLayout({ children }) {
             onClick={handleLogout}
             style={{ color: '#94a3b8' }}
           >
-            退出
+            {t.srp.logout}
           </Button>
         </Space>
       </Header>
@@ -327,10 +350,11 @@ function Dashboard() {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedLoss, setSelectedLoss] = useState(null);
   const [comment, setComment] = useState('');
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (!user?.charId || !user?.token) {
-      navigate('/');
+      navigate('/srp');
       return;
     }
     userApi.get(`/losses/${user.charId}`)
@@ -353,15 +377,14 @@ function Dashboard() {
     
     setSubmitting(selectedLoss.killmail_id);
     try {
-      // 不再需要发送 charId 和 charName，服务端从 token 中获取
       await userApi.post('/srp', {
         lossMail: selectedLoss,
         comment
       });
-      message.success('申请提交成功！可以在"我的申请"中查看进度。');
+      message.success(t.srp.submitSuccess);
       setModalVisible(false);
     } catch (err) {
-      message.error('提交失败: ' + (err.response?.data?.error || '未知错误'));
+      message.error(t.srp.submitFailed + ': ' + (err.response?.data?.error || '未知错误'));
     } finally {
       setSubmitting(null);
     }
@@ -375,10 +398,10 @@ function Dashboard() {
         title={
           <Space>
             <PlusOutlined />
-            <span>申请补损</span>
+            <span>{t.srp.applyTitle}</span>
           </Space>
         }
-        extra={<Text type="secondary">选择需要补损的损失记录</Text>}
+        extra={<Text type="secondary">{t.srp.applyDesc}</Text>}
         style={{ 
           background: 'rgba(30, 41, 59, 0.6)',
           border: '1px solid rgba(51, 65, 85, 0.5)',
@@ -387,11 +410,11 @@ function Dashboard() {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
             <Spin size="large" />
-            <Paragraph style={{ marginTop: 16 }}>正在从 zKillboard 获取数据...</Paragraph>
+            <Paragraph style={{ marginTop: 16 }}>{t.srp.fetchingLosses}</Paragraph>
           </div>
         ) : losses.length === 0 ? (
           <Empty 
-            description="暂无损失记录" 
+            description={t.srp.noLosses} 
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         ) : (
@@ -428,7 +451,7 @@ function Dashboard() {
                     title={
                       <Space>
                         <RocketOutlined style={{ color: '#3b82f6' }} />
-                        <span>船只 ID: {loss.ship_type_id}</span>
+                        <span>{t.srp.shipId}: {loss.ship_type_id}</span>
                       </Space>
                     }
                     description={
@@ -438,7 +461,7 @@ function Dashboard() {
                           {new Date(loss.killmail_time).toLocaleString()}
                         </Text>
                         <Text style={{ color: '#f59e0b' }}>
-                          损失价值: {(loss.zkb?.totalValue / 1000000)?.toFixed(2) || '未知'} M ISK
+                          {t.srp.lossValue}: {(loss.zkb?.totalValue / 1000000)?.toFixed(2) || '未知'} M ISK
                         </Text>
                       </Space>
                     }
@@ -455,31 +478,31 @@ function Dashboard() {
         title={
           <Space>
             <PlusOutlined />
-            <span>提交补损申请</span>
+            <span>{t.srp.submitModal}</span>
           </Space>
         }
         open={modalVisible}
         onCancel={() => setModalVisible(false)}
         onOk={handleSubmit}
-        okText="提交申请"
-        cancelText="取消"
+        okText={t.srp.submitButton}
+        cancelText={t.srp.cancel}
         confirmLoading={!!submitting}
       >
         {selectedLoss && (
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
             <Card size="small" style={{ background: 'rgba(15, 17, 25, 0.4)' }}>
               <Space direction="vertical" size={4}>
-                <Text>船只 ID: <Text strong>{selectedLoss.ship_type_id}</Text></Text>
+                <Text>{t.srp.shipId}: <Text strong>{selectedLoss.ship_type_id}</Text></Text>
                 <Text>击杀时间: <Text type="secondary">{new Date(selectedLoss.killmail_time).toLocaleString()}</Text></Text>
-                <Text>损失价值: <Text style={{ color: '#f59e0b' }}>{(selectedLoss.zkb?.totalValue / 1000000)?.toFixed(2) || '未知'} M ISK</Text></Text>
+                <Text>{t.srp.lossValue}: <Text style={{ color: '#f59e0b' }}>{(selectedLoss.zkb?.totalValue / 1000000)?.toFixed(2) || '未知'} M ISK</Text></Text>
               </Space>
             </Card>
             <div>
-              <Text style={{ marginBottom: 8, display: 'block' }}>备注说明 (可选):</Text>
+              <Text style={{ marginBottom: 8, display: 'block' }}>{t.srp.commentLabel}:</Text>
               <TextArea
                 value={comment}
                 onChange={e => setComment(e.target.value)}
-                placeholder="例如：舰队行动中被击毁..."
+                placeholder={t.srp.commentPlaceholder}
                 rows={3}
               />
             </div>
@@ -496,10 +519,11 @@ function MyRequests() {
   const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (!user?.charId || !user?.token) {
-      navigate('/');
+      navigate('/srp');
       return;
     }
     userApi.get(`/srp/my/${user.charId}`)
@@ -513,38 +537,38 @@ function MyRequests() {
 
   const columns = [
     {
-      title: '提交时间',
+      title: t.srp.submitTime,
       dataIndex: 'created_at',
       key: 'created_at',
       width: 180,
       render: (text) => new Date(text).toLocaleString(),
     },
     {
-      title: '船只ID',
+      title: t.srp.shipId,
       dataIndex: 'ship_type_id',
       key: 'ship_type_id',
       width: 100,
     },
     {
-      title: 'zKill链接',
+      title: t.srp.zkillLink,
       dataIndex: 'zkill_url',
       key: 'zkill_url',
       width: 100,
       render: (url) => (
         <a href={url} target="_blank" rel="noopener noreferrer">
-          <LinkOutlined /> 查看
+          <LinkOutlined /> {t.srp.view}
         </a>
       ),
     },
     {
-      title: '我的备注',
+      title: t.srp.myComment,
       dataIndex: 'player_comment',
       key: 'player_comment',
       ellipsis: true,
       render: (text) => text || <Text type="secondary">-</Text>,
     },
     {
-      title: '状态',
+      title: t.srp.status,
       dataIndex: 'status',
       key: 'status',
       width: 120,
@@ -553,13 +577,13 @@ function MyRequests() {
         const config = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
         return (
           <Tag color={config.color} icon={config.icon}>
-            {config.text}
+            {t.srp[status] || config.text}
           </Tag>
         );
       },
     },
     {
-      title: '管理员反馈',
+      title: t.srp.adminFeedback,
       key: 'admin_feedback',
       render: (_, record) => (
         record.admin_comment ? (
@@ -584,10 +608,10 @@ function MyRequests() {
         title={
           <Space>
             <FileTextOutlined />
-            <span>我的补损申请</span>
+            <span>{t.srp.myRequests}</span>
           </Space>
         }
-        extra={<Text type="secondary">查看申请进度和管理员反馈</Text>}
+        extra={<Text type="secondary">{t.srp.myRequestsDesc}</Text>}
         style={{ 
           background: 'rgba(30, 41, 59, 0.6)',
           border: '1px solid rgba(51, 65, 85, 0.5)',
@@ -609,6 +633,7 @@ function MyRequests() {
 
 // 6. 管理员界面
 function Admin() {
+  const { t } = useLanguage();
   const [creds, setCreds] = useState({ username: '', password: '' });
   const [token, setToken] = useState(localStorage.getItem('adminToken'));
   const [adminInfo, setAdminInfo] = useState(null);
@@ -637,7 +662,6 @@ function Admin() {
       message.success('登录成功');
       fetchRequests(res.data.token);
     } catch (err) {
-      // 处理速率限制错误
       if (err.response?.status === 429) {
         message.error(err.response.data?.error || '登录尝试次数过多，请稍后再试');
       } else {
@@ -708,7 +732,6 @@ function Admin() {
       fetchAdmins();
       message.success('添加成功');
     } catch (err) {
-      // 显示密码强度错误详情
       const details = err.response?.data?.details;
       if (details && Array.isArray(details)) {
         message.error('添加失败: ' + details.join(', '));
@@ -740,7 +763,6 @@ function Admin() {
     }
   }, [view]);
 
-  // 获取统计数据
   const getStatCount = (status) => {
     const stat = stats.find(s => s.status === status);
     return stat ? stat.count : 0;
@@ -768,11 +790,11 @@ function Admin() {
         >
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
             <SafetyCertificateOutlined style={{ fontSize: 48, color: '#3b82f6', marginBottom: 16 }} />
-            <Title level={3} style={{ margin: 0, color: '#f1f5f9' }}>管理员登录</Title>
+            <Title level={3} style={{ margin: 0, color: '#f1f5f9' }}>{t.admin.title}</Title>
           </div>
           
           <Form layout="vertical" onFinish={login}>
-            <Form.Item label="账号">
+            <Form.Item label={t.admin.username}>
               <Input
                 prefix={<UserOutlined />}
                 placeholder="请输入账号"
@@ -782,7 +804,7 @@ function Admin() {
               />
             </Form.Item>
             
-            <Form.Item label="密码">
+            <Form.Item label={t.admin.password}>
               <Input.Password
                 prefix={<SafetyCertificateOutlined />}
                 placeholder="请输入密码"
@@ -806,14 +828,14 @@ function Admin() {
                   border: 'none',
                 }}
               >
-                登录
+                {t.admin.loginButton}
               </Button>
             </Form.Item>
           </Form>
           
           <div style={{ textAlign: 'center' }}>
             <Link to="/">
-              <Button type="link" icon={<HomeOutlined />}>返回首页</Button>
+              <Button type="link" icon={<HomeOutlined />}>{t.admin.backHome}</Button>
             </Link>
           </div>
         </Card>
@@ -821,10 +843,9 @@ function Admin() {
     );
   }
 
-  // 申请管理表格列
   const requestColumns = [
     {
-      title: '角色',
+      title: t.admin.character,
       dataIndex: 'char_name',
       key: 'char_name',
       width: 120,
@@ -838,7 +859,7 @@ function Admin() {
       ),
     },
     {
-      title: '提交时间',
+      title: t.admin.submitTime,
       dataIndex: 'created_at',
       key: 'created_at',
       width: 160,
@@ -849,25 +870,25 @@ function Admin() {
       ),
     },
     {
-      title: 'zKill',
+      title: t.admin.zkill,
       dataIndex: 'zkill_url',
       key: 'zkill_url',
       width: 80,
       render: (url) => (
         <a href={url} target="_blank" rel="noopener noreferrer">
-          <LinkOutlined /> 链接
+          <LinkOutlined /> {t.admin.link}
         </a>
       ),
     },
     {
-      title: '玩家备注',
+      title: t.admin.playerComment,
       dataIndex: 'player_comment',
       key: 'player_comment',
       ellipsis: true,
       render: (text) => text || <Text type="secondary">-</Text>,
     },
     {
-      title: '状态',
+      title: t.admin.status,
       dataIndex: 'status',
       key: 'status',
       width: 110,
@@ -876,20 +897,20 @@ function Admin() {
         const config = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
         return (
           <Tag color={config.color} icon={config.icon}>
-            {config.text}
+            {t.admin[status] || config.text}
           </Tag>
         );
       },
     },
     {
-      title: '管理员备注',
+      title: t.admin.adminComment,
       dataIndex: 'admin_comment',
       key: 'admin_comment',
       ellipsis: true,
       render: (text) => text || <Text type="secondary">-</Text>,
     },
     {
-      title: '操作',
+      title: t.admin.action,
       key: 'action',
       width: 100,
       align: 'center',
@@ -900,7 +921,7 @@ function Admin() {
             size="small"
             onClick={() => setReviewModal(record)}
           >
-            审核
+            {t.admin.review}
           </Button>
         ) : (
           <Text type="secondary" style={{ fontSize: 12 }}>
@@ -911,43 +932,42 @@ function Admin() {
     },
   ];
 
-  // 管理员表格列
   const adminColumns = [
     {
-      title: '用户名',
+      title: t.admin.username,
       dataIndex: 'username',
       key: 'username',
     },
     {
-      title: '角色',
+      title: t.admin.role,
       dataIndex: 'role',
       key: 'role',
       render: (role) => (
         <Tag color={role === 'super_admin' ? 'blue' : 'default'}>
-          {role === 'super_admin' ? '超级管理员' : '管理员'}
+          {role === 'super_admin' ? t.admin.superAdmin : t.admin.normalAdmin}
         </Tag>
       ),
     },
     {
-      title: '创建时间',
+      title: t.admin.createTime,
       dataIndex: 'created_at',
       key: 'created_at',
       render: (text) => new Date(text).toLocaleString(),
     },
     {
-      title: '操作',
+      title: t.admin.action,
       key: 'action',
       width: 100,
       render: (_, record) => (
         record.role !== 'super_admin' && (
           <Popconfirm
-            title="确定要删除该管理员吗？"
+            title={t.admin.confirmDelete}
             onConfirm={() => handleDeleteAdmin(record.id)}
-            okText="确定"
-            cancelText="取消"
+            okText={t.admin.confirm}
+            cancelText={t.srp.cancel}
           >
             <Button type="primary" danger size="small" icon={<DeleteOutlined />}>
-              删除
+              {t.admin.delete}
             </Button>
           </Popconfirm>
         )
@@ -956,9 +976,9 @@ function Admin() {
   ];
 
   const menuItems = [
-    { key: 'requests', icon: <FileTextOutlined />, label: '申请管理' },
+    { key: 'requests', icon: <FileTextOutlined />, label: t.admin.requestManagement },
     ...(adminInfo?.role === 'super_admin' ? [
-      { key: 'admins', icon: <TeamOutlined />, label: '管理员设置' }
+      { key: 'admins', icon: <TeamOutlined />, label: t.admin.adminSettings }
     ] : []),
   ];
 
@@ -977,7 +997,7 @@ function Admin() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', marginRight: 48 }}>
           <SafetyCertificateOutlined style={{ fontSize: 24, color: '#3b82f6', marginRight: 12 }} />
-          <Title level={4} style={{ margin: 0, color: '#f1f5f9' }}>SRP 管理后台</Title>
+          <Title level={4} style={{ margin: 0, color: '#f1f5f9' }}>{t.admin.dashboard}</Title>
         </div>
         
         <Menu
@@ -1001,7 +1021,7 @@ function Admin() {
           <Text style={{ color: '#94a3b8' }}>
             {adminInfo?.username} 
             <Tag color="blue" style={{ marginLeft: 8 }}>
-              {adminInfo?.role === 'super_admin' ? '超级管理员' : '管理员'}
+              {adminInfo?.role === 'super_admin' ? t.admin.superAdmin : t.admin.normalAdmin}
             </Tag>
           </Text>
           <Button 
@@ -1010,16 +1030,14 @@ function Admin() {
             onClick={logout}
             style={{ color: '#94a3b8' }}
           >
-            退出
+            {t.srp.logout}
           </Button>
         </Space>
       </Header>
       
       <Content style={{ padding: '24px', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
-        {/* 申请管理视图 */}
         {view === 'requests' && (
           <>
-            {/* 统计卡片 */}
             <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
               <Col xs={12} sm={6}>
                 <Card 
@@ -1032,7 +1050,7 @@ function Admin() {
                   }}
                 >
                   <Statistic 
-                    title={<Text type="secondary">全部</Text>}
+                    title={<Text type="secondary">{t.admin.all}</Text>}
                     value={totalCount}
                     valueStyle={{ color: '#f1f5f9' }}
                   />
@@ -1050,7 +1068,7 @@ function Admin() {
                   }}
                 >
                   <Statistic 
-                    title={<Text type="secondary">待审核</Text>}
+                    title={<Text type="secondary">{t.admin.pending}</Text>}
                     value={getStatCount('pending')}
                     valueStyle={{ color: '#f59e0b' }}
                     prefix={<ClockCircleOutlined />}
@@ -1069,7 +1087,7 @@ function Admin() {
                   }}
                 >
                   <Statistic 
-                    title={<Text type="secondary">已批准</Text>}
+                    title={<Text type="secondary">{t.admin.approved}</Text>}
                     value={getStatCount('approved')}
                     valueStyle={{ color: '#10b981' }}
                     prefix={<CheckCircleOutlined />}
@@ -1088,7 +1106,7 @@ function Admin() {
                   }}
                 >
                   <Statistic 
-                    title={<Text type="secondary">已拒绝</Text>}
+                    title={<Text type="secondary">{t.admin.rejected}</Text>}
                     value={getStatCount('rejected')}
                     valueStyle={{ color: '#ef4444' }}
                     prefix={<CloseCircleOutlined />}
@@ -1097,15 +1115,14 @@ function Admin() {
               </Col>
             </Row>
 
-            {/* 申请列表 */}
             <Card
               title={
                 <Space>
                   <FileTextOutlined />
                   <span>
-                    {filter === 'all' ? '全部申请' : 
-                     filter === 'pending' ? '待审核' : 
-                     filter === 'approved' ? '已批准' : '已拒绝'}
+                    {filter === 'all' ? t.admin.all : 
+                     filter === 'pending' ? t.admin.pending : 
+                     filter === 'approved' ? t.admin.approved : t.admin.rejected}
                   </span>
                 </Space>
               }
@@ -1127,13 +1144,12 @@ function Admin() {
           </>
         )}
 
-        {/* 管理员设置视图 */}
         {view === 'admins' && (
           <Card
             title={
               <Space>
                 <TeamOutlined />
-                <span>管理员管理</span>
+                <span>{t.admin.adminManagement}</span>
               </Space>
             }
             style={{ 
@@ -1141,7 +1157,6 @@ function Admin() {
               border: '1px solid rgba(51, 65, 85, 0.5)',
             }}
           >
-            {/* 添加管理员 */}
             <Card
               size="small"
               style={{ 
@@ -1152,14 +1167,14 @@ function Admin() {
             >
               <Space wrap>
                 <Input
-                  placeholder="用户名"
+                  placeholder={t.admin.username}
                   value={newAdmin.username}
                   onChange={e => setNewAdmin({ ...newAdmin, username: e.target.value })}
                   style={{ width: 200 }}
                   prefix={<UserOutlined />}
                 />
                 <Input.Password
-                  placeholder="密码"
+                  placeholder={t.admin.password}
                   value={newAdmin.password}
                   onChange={e => setNewAdmin({ ...newAdmin, password: e.target.value })}
                   style={{ width: 200 }}
@@ -1170,12 +1185,11 @@ function Admin() {
                   onClick={handleAddAdmin}
                   style={{ background: '#10b981', borderColor: '#10b981' }}
                 >
-                  添加管理员
+                  {t.admin.addAdmin}
                 </Button>
               </Space>
             </Card>
 
-            {/* 管理员列表 */}
             <Table
               columns={adminColumns}
               dataSource={admins}
@@ -1185,19 +1199,18 @@ function Admin() {
           </Card>
         )}
 
-        {/* 审核弹窗 */}
         <Modal
           title={
             <Space>
               <FileTextOutlined />
-              <span>审核申请</span>
+              <span>{t.admin.reviewRequest}</span>
             </Space>
           }
           open={!!reviewModal}
           onCancel={() => { setReviewModal(null); setAdminComment(''); }}
           footer={[
             <Button key="cancel" onClick={() => { setReviewModal(null); setAdminComment(''); }}>
-              取消
+              {t.srp.cancel}
             </Button>,
             <Button 
               key="reject" 
@@ -1205,7 +1218,7 @@ function Admin() {
               icon={<CloseCircleOutlined />}
               onClick={() => handleReview('reject')}
             >
-              拒绝
+              {t.admin.reject}
             </Button>,
             <Button 
               key="approve" 
@@ -1214,7 +1227,7 @@ function Admin() {
               onClick={() => handleReview('approve')}
               style={{ background: '#10b981', borderColor: '#10b981' }}
             >
-              批准
+              {t.admin.approve}
             </Button>,
           ]}
           width={520}
@@ -1223,21 +1236,21 @@ function Admin() {
             <Space direction="vertical" size={16} style={{ width: '100%' }}>
               <Card size="small" style={{ background: 'rgba(15, 17, 25, 0.4)' }}>
                 <Space direction="vertical" size={8}>
-                  <Text><UserOutlined style={{ marginRight: 8 }} />角色: <Text strong>{reviewModal.char_name}</Text></Text>
+                  <Text><UserOutlined style={{ marginRight: 8 }} />{t.admin.character}: <Text strong>{reviewModal.char_name}</Text></Text>
                   <Text>
                     <LinkOutlined style={{ marginRight: 8 }} />
                     zKill: <a href={reviewModal.zkill_url} target="_blank" rel="noopener noreferrer">{reviewModal.zkill_url}</a>
                   </Text>
-                  <Text><FileTextOutlined style={{ marginRight: 8 }} />玩家备注: {reviewModal.player_comment || '无'}</Text>
+                  <Text><FileTextOutlined style={{ marginRight: 8 }} />{t.admin.playerComment}: {reviewModal.player_comment || '无'}</Text>
                 </Space>
               </Card>
               
               <div>
-                <Text style={{ marginBottom: 8, display: 'block' }}>管理员建议/备注:</Text>
+                <Text style={{ marginBottom: 8, display: 'block' }}>{t.admin.adminSuggestion}:</Text>
                 <TextArea
                   value={adminComment}
                   onChange={e => setAdminComment(e.target.value)}
-                  placeholder="可选：输入给玩家的反馈信息..."
+                  placeholder={t.admin.adminCommentPlaceholder}
                   rows={4}
                 />
               </div>
@@ -1251,15 +1264,31 @@ function Admin() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/my-requests" element={<MyRequests />} />
-        <Route path="/admin" element={<Admin />} />
-      </Routes>
-    </BrowserRouter>
+    <ConfigProvider>
+      <LanguageProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* 公开首页 - 军团展示 */}
+            <Route path="/" element={<Home />} />
+            
+            {/* SRP 登录页 */}
+            <Route path="/srp" element={<SRPLogin />} />
+            
+            {/* EVE SSO 回调 */}
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            
+            {/* 用户面板 - 申请补损 */}
+            <Route path="/dashboard" element={<Dashboard />} />
+            
+            {/* 我的申请 */}
+            <Route path="/my-requests" element={<MyRequests />} />
+            
+            {/* 管理员后台 */}
+            <Route path="/admin" element={<Admin />} />
+          </Routes>
+        </BrowserRouter>
+      </LanguageProvider>
+    </ConfigProvider>
   );
 }
 

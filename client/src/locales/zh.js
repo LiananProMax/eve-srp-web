@@ -1,0 +1,165 @@
+export default {
+  // 导航和通用
+  common: {
+    loading: '加载中...',
+    error: '错误',
+    retry: '重试',
+    clickForDetails: '点击查看详情 →',
+  },
+  
+  // Hero 部分
+  hero: {
+    slogan: '风越强劲，树越坚挺\n天越高远，枝越伸展\n风暴愈烈，力量愈大\n阳光寒冷，雨雪交加\n树与人皆因磨砺而成长',
+    joinUs: '加入我们 / Join Us',
+    logoAlt: '军团徽标',
+    discordModal: {
+      title: 'Discord 联系方式',
+      discordIdLabel: 'Discord ID',
+      nicknameLabel: '昵称',
+      copyHint: '添加我的 Discord 好友以加入军团。',
+      closeButton: '关闭',
+      avatarAlt: 'Discord 头像',
+    },
+  },
+  
+  // 统计面板
+  stats: {
+    title: '我们的战绩',
+    subtitle: '点击卡片查看详细击杀报告',
+    totalValue: '总击杀价值',
+    shipsDestroyed: '击毁舰船',
+    shipsLost: '损失舰船',
+    efficiency: '效率',
+    soloKills: 'Solo 击杀',
+    avgGangSize: '平均团队规模',
+    monthlyKills: '本月击杀',
+    loadingStats: '加载统计数据中...',
+    statsLoadFailed: '统计数据加载失败',
+  },
+  
+  // 击杀卡片
+  killCard: {
+    pilot: '飞行员',
+    corpMember: '军团成员',
+    isk: 'ISK',
+    shipFallbackAlt: '未知舰船',
+  },
+  
+  // 加载和错误状态
+  loading: {
+    fetchingKills: '加载中...',
+    noKillsYet: '暂无战绩数据',
+    noKillsDesc: '这个军团可能还没有击杀记录，或者数据正在同步中',
+    loadError: '无法加载战绩数据，请稍后重试',
+  },
+  
+  // 页脚
+  footer: {
+    independent: '独立',
+    corporation: '军团',
+    poweredBy: '数据来源：zKillboard & ESI',
+  },
+  
+  // 语言切换
+  language: {
+    switchTo: '切换语言',
+    en: 'English',
+    zh: '中文',
+  },
+  
+  // 公司信息
+  corpInfo: {
+    title: '公司信息',
+    loading: '加载公司信息中...',
+    loadError: '无法加载公司信息',
+    members: '成员',
+    ceo: 'CEO',
+    taxRate: '税率',
+    founded: '成立日期',
+    website: 'zKillboard 页面',
+    locale: 'zh-CN',
+  },
+
+  // SRP 补损系统
+  srp: {
+    title: '舰船补损系统',
+    loginTitle: '军团补损系统',
+    loginSubtitle: 'Ship Replacement Program',
+    loginDesc: '使用 EVE Online 账号登录，查看并提交补损申请',
+    loginButton: '使用 EVE SSO 登录',
+    adminEntry: '管理员入口',
+    applyTitle: '申请补损',
+    applyDesc: '选择需要补损的损失记录',
+    myRequests: '我的申请',
+    myRequestsDesc: '查看申请进度和管理员反馈',
+    submitTime: '提交时间',
+    shipId: '船只ID',
+    zkillLink: 'zKill链接',
+    view: '查看',
+    myComment: '我的备注',
+    status: '状态',
+    adminFeedback: '管理员反馈',
+    pending: '待审核',
+    approved: '已批准',
+    rejected: '已拒绝',
+    lossValue: '损失价值',
+    submitModal: '提交补损申请',
+    commentLabel: '备注说明 (可选)',
+    commentPlaceholder: '例如：舰队行动中被击毁...',
+    submitButton: '提交申请',
+    cancel: '取消',
+    noLosses: '暂无损失记录',
+    fetchingLosses: '正在从 zKillboard 获取数据...',
+    submitSuccess: '申请提交成功！可以在"我的申请"中查看进度。',
+    submitFailed: '提交失败',
+    welcome: '欢迎',
+    logout: '退出',
+    srpSystem: 'SRP 系统',
+  },
+
+  // 管理员
+  admin: {
+    title: '管理员登录',
+    username: '账号',
+    password: '密码',
+    loginButton: '登录',
+    backHome: '返回首页',
+    dashboard: 'SRP 管理后台',
+    requestManagement: '申请管理',
+    adminSettings: '管理员设置',
+    all: '全部',
+    pending: '待审核',
+    approved: '已批准',
+    rejected: '已拒绝',
+    character: '角色',
+    submitTime: '提交时间',
+    zkill: 'zKill',
+    link: '链接',
+    playerComment: '玩家备注',
+    status: '状态',
+    adminComment: '管理员备注',
+    action: '操作',
+    review: '审核',
+    reviewRequest: '审核申请',
+    adminSuggestion: '管理员建议/备注',
+    adminCommentPlaceholder: '可选：输入给玩家的反馈信息...',
+    approve: '批准',
+    reject: '拒绝',
+    adminManagement: '管理员管理',
+    addAdmin: '添加管理员',
+    role: '角色',
+    superAdmin: '超级管理员',
+    normalAdmin: '管理员',
+    createTime: '创建时间',
+    delete: '删除',
+    confirmDelete: '确定要删除该管理员吗？',
+    confirm: '确定',
+  },
+
+  // 导航
+  nav: {
+    home: '首页',
+    srp: '补损申请',
+    myRequests: '我的申请',
+  },
+};

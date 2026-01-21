@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 深色背景 -->
+  <rect width="512" height="512" fill="#1a1a2e"/>
+  
+  <!-- 舰船轮廓 -->
+  <g fill="#4a4e69" opacity="0.6">
+    <!-- 主船体 -->
+    <ellipse cx="256" cy="256" rx="120" ry="60"/>
+    
+    <!-- 舰桥 -->
+    <rect x="236" y="220" width="40" height="30" rx="5"/>
+    
+    <!-- 引擎尾焰位置 -->
+    <circle cx="180" cy="256" r="15"/>
+    <circle cx="332" cy="256" r="15"/>
+    
+    <!-- 武器炮塔 -->
+    <circle cx="256" cy="200" r="12"/>
+    <circle cx="230" cy="280" r="10"/>
+    <circle cx="282" cy="280" r="10"/>
+  </g>
+  
+  <!-- 问号图标 -->
+  <g fill="#6c757d" opacity="0.8">
+    <circle cx="256" cy="380" r="35"/>
+    <text x="256" y="400" font-family="Arial, sans-serif" font-size="50" font-weight="bold" fill="#1a1a2e" text-anchor="middle">?</text>
+  </g>
+  
+  <!-- 边框 -->
+  <rect x="2" y="2" width="508" height="508" fill="none" stroke="#4a4e69" stroke-width="2" opacity="0.3"/>
+</svg>
+

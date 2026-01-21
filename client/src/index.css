@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* EVE SRP System Global Styles */
 * {
   margin: 0;
@@ -7,8 +11,30 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: linear-gradient(135deg, #1a1c2c 0%, #0f1119 100%);
+  /* 深空渐变背景 */
+  background: linear-gradient(135deg, #0b1120 0%, #1a1f3a 50%, #0b1120 100%);
   min-height: 100vh;
+  color: #e2e8f0;
+}
+
+/* 星空效果 */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    radial-gradient(2px 2px at 20% 30%, white, transparent),
+    radial-gradient(2px 2px at 60% 70%, white, transparent),
+    radial-gradient(1px 1px at 50% 50%, white, transparent),
+    radial-gradient(1px 1px at 80% 10%, white, transparent),
+    radial-gradient(2px 2px at 90% 60%, white, transparent);
+  background-size: 200% 200%;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: -1;
 }
 
 #root {
@@ -47,4 +73,32 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #64748b;
+}
+
+/* EVE富文本描述样式 */
+.eve-description {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.eve-description b {
+  font-weight: 700;
+}
+
+.eve-description i {
+  font-style: italic;
+}
+
+.eve-description u {
+  text-decoration: underline;
+}
+
+.eve-description br {
+  display: block;
+  content: "";
+  margin: 0.5em 0;
+}
+
+.eve-description span {
+  display: inline;
 }

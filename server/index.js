@@ -165,6 +165,28 @@ function requireSuperAdmin(req, res, next) {
     next();
 }
 
+// === 0. 公开配置 API ===
+// 返回前端需要的公开配置（不包含敏感信息）
+app.get('/api/config', (req, res) => {
+    res.json({
+        // EVE SSO 配置（公开信息）
+        eveClientId: CLIENT_ID,
+        callbackUrl: CALLBACK_URL,
+        
+        // 军团信息
+        corpId: TARGET_CORP_ID,
+        corpName: process.env.CORP_NAME || 'The Zephyr Brigade',
+        corpTicker: process.env.CORP_TICKER || 'T-ZB',
+        allianceName: process.env.ALLIANCE_NAME || '',
+        
+        // 联系方式
+        qqGroupLink: process.env.QQ_GROUP_LINK || '',
+        discordContactId: process.env.DISCORD_CONTACT_ID || '',
+        discordContactNickname: process.env.DISCORD_CONTACT_NICKNAME || '',
+        discordContactAvatar: process.env.DISCORD_CONTACT_AVATAR || '',
+    });
+});
+
 // === 1. EVE SSO 登录逻辑 ===
 const getAuthHeader = () => {
     return 'Basic ' + Buffer.from(`${CLIENT_ID}:${SECRET_KEY}`).toString('base64');
