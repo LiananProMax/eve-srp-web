@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { BrowserRouter, Routes, Route, useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
 import {
@@ -135,9 +135,12 @@ function AuthCallback() {
   const [searchParams] = useSearchParams();
   const code = searchParams.get('code');
   const navigate = useNavigate();
+  const hasRequested = useRef(false);
 
   useEffect(() => {
-    if (code) {
+    // 防止 React 18 严格模式下重复发送请求（code 只能使用一次）
+    if (code && !hasRequested.current) {
+      hasRequested.current = true;
       axios.post(`${API_BASE}/auth/eve`, { code })
         .then(res => {
           localStorage.setItem('user', JSON.stringify(res.data));
