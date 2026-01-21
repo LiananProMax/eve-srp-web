@@ -47,9 +47,13 @@ const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
-const API_BASE = 'http://localhost:3001/api';
+// === 环境配置 ===
+// 生产环境使用相对路径（通过反向代理），开发环境使用本地地址
+const isDev = import.meta.env.DEV;
+const API_BASE = isDev ? 'http://localhost:3001/api' : '/api';
 const EVE_CLIENT_ID = 'daa4dbb782144ccdb1d0ac87a33acccb';
-const REDIRECT_URI = 'http://localhost:5173/auth/callback';
+// 动态获取回调地址，支持任意域名部署
+const REDIRECT_URI = `${window.location.origin}/auth/callback`;
 
 // === 创建带认证的 axios 实例 ===
 const createAuthAxios = (tokenKey = 'user') => {
