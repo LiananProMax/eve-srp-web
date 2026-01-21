@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import axios from 'axios';
 import { BrowserRouter, Routes, Route, useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
 import {
@@ -54,6 +54,213 @@ const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
+// === 多用户存储管理工具 ===
+const USERS_STORAGE_KEY = 'srpUsers';
+const OLD_USER_KEY = 'user';
+
+// 迁移旧的单用户数据到新的多用户格式
+const migrateOldUserData = () => {
+  const oldUser = localStorage.getItem(OLD_USER_KEY);
+  if (oldUser) {
+    try {
+      const userData = JSON.parse(oldUser);
+      if (userData?.charId && userData?.token) {
+        // 检查是否已迁移
+        const existingUsers = localStorage.getItem(USERS_STORAGE_KEY);
+        if (!existingUsers) {
+          localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify([userData]));
+        }
+        // 清除旧数据
+        localStorage.removeItem(OLD_USER_KEY);
+      }
+    } catch (e) {
+      localStorage.removeItem(OLD_USER_KEY);
+    }
+  }
+};
+
+// 获取所有已登录用户
+const getUsers = () => {
+  migrateOldUserData();
+  try {
+    const stored = localStorage.getItem(USERS_STORAGE_KEY);
+    if (stored) {
+      const users = JSON.parse(stored);
+      return Array.isArray(users) ? users : [];
+    }
+  } catch (e) {
+    console.error('Failed to parse users:', e);
+  }
+  return [];
+};
+
+// 添加用户（如已存在则更新 token）
+const addUser = (user) => {
+  const users = getUsers();
+  const existingIndex = users.findIndex(u => u.charId === user.charId);
+  if (existingIndex >= 0) {
+    users[existingIndex] = user;
+  } else {
+    users.push(user);
+  }
+  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+  return users;
+};
+
+// 移除指定用户
+const removeUser = (charId) => {
+  const users = getUsers().filter(u => u.charId !== charId);
+  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+  return users;
+};
+
+// 清除所有用户（退出登录）
+const clearAllUsers = () => {
+  localStorage.removeItem(USERS_STORAGE_KEY);
+};
+
+// 获取特定用户
+const getUserByCharId = (charId) => {
+  return getUsers().find(u => u.charId === charId);
+};
+
+// 检查是否有登录用户
+const hasLoggedInUsers = () => {
+  return getUsers().length > 0;
+};
+
+// 获取角色头像 URL
+const getCharacterAvatarUrl = (charId, size = 64) => {
+  return `https://images.evetech.net/characters/${charId}/portrait?size=${size}`;
+};
+
+// 获取船只渲染图 URL（3D 舰船图）
+const getShipRenderUrl = (typeId, size = 256) => {
+  return `https://images.evetech.net/types/${typeId}/render?size=${size}`;
+};
+
+// 获取船只图标 URL
+const getShipIconUrl = (typeId, size = 64) => {
+  return `https://images.evetech.net/types/${typeId}/icon?size=${size}`;
+};
+
+// === 船只名称缓存和获取 ===
+const SHIP_NAMES_CACHE_KEY = 'eve_ship_names';
+const SHIP_NAMES_CACHE_EXPIRY = 7 * 24 * 60 * 60 * 1000; // 缓存7天
+
+// 获取缓存的船只名称
+const getShipNamesCache = () => {
+  try {
+    const cached = localStorage.getItem(SHIP_NAMES_CACHE_KEY);
+    if (cached) {
+      const data = JSON.parse(cached);
+      if (Date.now() - data.timestamp < SHIP_NAMES_CACHE_EXPIRY) {
+        return data.names || {};
+      }
+    }
+  } catch (e) {
+    console.error('Failed to parse ship names cache:', e);
+  }
+  return {};
+};
+
+// 保存船只名称到缓存
+const saveShipNamesCache = (names) => {
+  try {
+    const existing = getShipNamesCache();
+    const merged = { ...existing, ...names };
+    localStorage.setItem(SHIP_NAMES_CACHE_KEY, JSON.stringify({
+      names: merged,
+      timestamp: Date.now()
+    }));
+  } catch (e) {
+    console.error('Failed to save ship names cache:', e);
+  }
+};
+
+// 批量获取船只名称（使用 POST /universe/names/，只返回英文）
+const fetchShipNames = async (typeIds) => {
+  if (!typeIds || typeIds.length === 0) return {};
+  
+  // 去重
+  const uniqueIds = [...new Set(typeIds.map(id => parseInt(id)))].filter(id => id > 0);
+  if (uniqueIds.length === 0) return {};
+  
+  // 检查缓存
+  const cached = getShipNamesCache();
+  const uncachedIds = uniqueIds.filter(id => !cached[id]);
+  
+  // 如果全部都在缓存中，直接返回
+  if (uncachedIds.length === 0) {
+    const result = {};
+    uniqueIds.forEach(id => {
+      result[id] = cached[id];
+    });
+    return result;
+  }
+  
+  try {
+    // 使用 ESI 批量获取名称
+    const response = await axios.post(
+      'https://esi.evetech.net/latest/universe/names/',
+      uncachedIds,
+      {
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+    
+    // 处理响应
+    const newNames = {};
+    response.data.forEach(item => {
+      if (item.category === 'inventory_type') {
+        newNames[item.id] = item.name;
+      }
+    });
+    
+    // 保存到缓存
+    if (Object.keys(newNames).length > 0) {
+      saveShipNamesCache(newNames);
+    }
+    
+    // 合并缓存和新获取的数据
+    const result = {};
+    uniqueIds.forEach(id => {
+      result[id] = newNames[id] || cached[id] || `Type ${id}`;
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('Failed to fetch ship names:', error);
+    // 返回缓存中的数据 + 默认值
+    const result = {};
+    uniqueIds.forEach(id => {
+      result[id] = cached[id] || `Type ${id}`;
+    });
+    return result;
+  }
+};
+
+// 自定义 Hook：获取船只名称（英文）
+const useShipNames = (typeIds) => {
+  const [names, setNames] = useState({});
+  const [loading, setLoading] = useState(false);
+  
+  useEffect(() => {
+    if (!typeIds || typeIds.length === 0) return;
+    
+    const loadNames = async () => {
+      setLoading(true);
+      const fetchedNames = await fetchShipNames(typeIds);
+      setNames(fetchedNames);
+      setLoading(false);
+    };
+    
+    loadNames();
+  }, [typeIds.join(',')]);
+  
+  return { names, loading };
+};
+
 // === 金额格式化工具 ===
 // 格式化数字为千分位显示
 const formatISK = (value) => {
@@ -81,22 +288,26 @@ const createAuthAxios = (tokenKey = 'user') => {
   
   instance.interceptors.request.use((config) => {
     try {
-      const stored = localStorage.getItem(tokenKey);
-      if (stored) {
-        let token;
-        if (tokenKey === 'user') {
-          const data = JSON.parse(stored);
-          token = data.token;
-        } else {
-          token = stored;
+      // 如果请求中已经指定了 token，使用指定的 token
+      if (config._userToken) {
+        config.headers.Authorization = `Bearer ${config._userToken}`;
+        return config;
+      }
+      
+      if (tokenKey === 'user' || tokenKey === USERS_STORAGE_KEY) {
+        // 多用户模式：使用第一个用户的 token 作为默认
+        const users = getUsers();
+        if (users.length > 0) {
+          config.headers.Authorization = `Bearer ${users[0].token}`;
         }
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
+      } else {
+        const stored = localStorage.getItem(tokenKey);
+        if (stored) {
+          config.headers.Authorization = `Bearer ${stored}`;
         }
       }
     } catch (e) {
       console.error('Token parsing error:', e);
-      localStorage.removeItem(tokenKey);
     }
     return config;
   });
@@ -107,10 +318,14 @@ const createAuthAxios = (tokenKey = 'user') => {
       if (error.response?.status === 401 || error.response?.status === 403) {
         const errorMsg = error.response?.data?.error || '';
         if (errorMsg.includes('token') || errorMsg.includes('Token') || errorMsg.includes('凭证')) {
-          localStorage.removeItem(tokenKey);
-          if (tokenKey === 'user') {
-            window.location.href = '/srp';
+          if (tokenKey === 'user' || tokenKey === USERS_STORAGE_KEY) {
+            // 多用户模式下，token 过期只移除对应用户
+            // 如果所有用户都失效，则跳转登录页
+            if (getUsers().length === 0) {
+              window.location.href = '/srp';
+            }
           } else {
+            localStorage.removeItem(tokenKey);
             window.location.href = '/admin';
           }
         }
@@ -122,7 +337,10 @@ const createAuthAxios = (tokenKey = 'user') => {
   return instance;
 };
 
-const userApi = createAuthAxios('user');
+// 创建带指定用户 token 的请求配置
+const withUserToken = (token) => ({ _userToken: token });
+
+const userApi = createAuthAxios(USERS_STORAGE_KEY);
 const adminApi = createAuthAxios('adminToken');
 
 // 状态配置
@@ -141,17 +359,8 @@ function SRPLogin() {
   
   // 检查是否已登录，如果已登录则跳转到 dashboard
   useEffect(() => {
-    const stored = localStorage.getItem('user');
-    if (stored) {
-      try {
-        const user = JSON.parse(stored);
-        if (user?.charId && user?.token) {
-          navigate('/dashboard');
-        }
-      } catch (e) {
-        // 解析失败，清除无效数据
-        localStorage.removeItem('user');
-      }
+    if (hasLoggedInUsers()) {
+      navigate('/dashboard');
     }
   }, [navigate]);
   
@@ -256,27 +465,40 @@ function AuthCallback() {
   const code = searchParams.get('code');
   const navigate = useNavigate();
   const hasRequested = useRef(false);
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (code && !hasRequested.current) {
       hasRequested.current = true;
       axios.post(`${API_BASE}/auth/eve`, { code })
         .then(res => {
-          localStorage.setItem('user', JSON.stringify({
+          const newUser = {
             charId: res.data.charId,
             charName: res.data.charName,
             token: res.data.token
-          }));
-          message.success('登录成功！');
+          };
+          // 追加用户到列表（而非覆盖）
+          const users = addUser(newUser);
+          const isNewAccount = users.length > 1;
+          
+          if (isNewAccount) {
+            message.success(t?.srp?.accountAdded?.replace('{name}', newUser.charName) || `已添加角色: ${newUser.charName}`);
+          } else {
+            message.success(t?.srp?.loginSuccess || '登录成功！');
+          }
           navigate('/dashboard');
         })
         .catch(err => {
-          localStorage.removeItem('user');
-          message.error('登录失败：' + (err.response?.data?.error || '非本军团成员'));
-          navigate('/srp');
+          message.error((t?.srp?.loginFailed || '登录失败') + '：' + (err.response?.data?.error || t?.srp?.notCorpMember || '非本军团成员'));
+          // 如果已有其他账号，返回 dashboard；否则返回登录页
+          if (hasLoggedInUsers()) {
+            navigate('/dashboard');
+          } else {
+            navigate('/srp');
+          }
         });
     }
-  }, [code, navigate]);
+  }, [code, navigate, t]);
 
   return (
     <div className="login-background" style={{ 
@@ -293,17 +515,18 @@ function AuthCallback() {
       }}>
         <Spin size="large" />
         <Title level={4} style={{ marginTop: 24, color: '#f1f5f9' }}>
-          正在验证身份...
+          {t?.srp?.verifying || '正在验证身份...'}
         </Title>
-        <Text type="secondary">请稍候，正在与 EVE Online 服务器通信</Text>
+        <Text type="secondary">{t?.srp?.verifyingDesc || '请稍候，正在与 EVE Online 服务器通信'}</Text>
       </Card>
     </div>
   );
 }
 
-// 3. 用户布局组件
+// 3. 用户布局组件（多账号版本）
 function UserLayout({ children }) {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const users = getUsers();
+  const primaryUser = users[0] || {};
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useLanguage();
@@ -311,15 +534,49 @@ function UserLayout({ children }) {
   const corpLogoUrl = getCorporationLogoUrl(config.corpId, 64);
 
   const handleLogout = () => {
-    localStorage.removeItem('user');
-    message.info('已退出登录');
+    clearAllUsers();
+    // 清除所有角色的缓存
+    users.forEach(user => {
+      sessionStorage.removeItem(getLossesCacheKey(user.charId));
+    });
+    message.info(t?.srp?.loggedOut || '已退出登录');
     navigate('/srp');
   };
 
   const menuItems = [
-    { key: '/', icon: <HomeOutlined />, label: t.nav.home },
-    { key: '/dashboard', icon: <PlusOutlined />, label: t.nav.srp },
-    { key: '/my-requests', icon: <FileTextOutlined />, label: t.nav.myRequests },
+    { key: '/', icon: <HomeOutlined />, label: t?.nav?.home || '首页' },
+    { key: '/dashboard', icon: <PlusOutlined />, label: t?.nav?.srp || '补损申请' },
+    { key: '/my-requests', icon: <FileTextOutlined />, label: t?.nav?.myRequests || '我的申请' },
+  ];
+
+  // 用户下拉菜单项
+  const userMenuItems = [
+    ...(users.length > 1 ? [
+      {
+        key: 'accounts-header',
+        label: <Text type="secondary" style={{ fontSize: 12 }}>{t?.srp?.loggedInAccounts || '已登录角色'} ({users.length})</Text>,
+        disabled: true,
+      },
+      { type: 'divider' },
+      ...users.map(user => ({
+        key: `user-${user.charId}`,
+        label: (
+          <Space>
+            <Avatar src={getCharacterAvatarUrl(user.charId, 32)} size="small" />
+            <span>{user.charName}</span>
+          </Space>
+        ),
+        disabled: true,
+      })),
+      { type: 'divider' },
+    ] : []),
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: t?.srp?.logoutAll || '退出所有账号',
+      danger: true,
+      onClick: handleLogout,
+    },
   ];
 
   return (
@@ -346,7 +603,7 @@ function UserLayout({ children }) {
           ) : (
             <RocketOutlined style={{ fontSize: 24, color: '#3b82f6', marginRight: 12 }} />
           )}
-          <Title level={4} style={{ margin: 0, color: '#f1f5f9' }}>{t.srp.srpSystem}</Title>
+          <Title level={4} style={{ margin: 0, color: '#f1f5f9' }}>{t?.srp?.srpSystem || 'SRP 系统'}</Title>
         </div>
         
         <Menu
@@ -363,21 +620,42 @@ function UserLayout({ children }) {
         />
         
         <Space size={16}>
-          <Avatar 
-            style={{ backgroundColor: '#3b82f6' }} 
-            icon={<UserOutlined />}
+          {/* 显示所有已登录角色的头像 */}
+          <Avatar.Group maxCount={3} size="small">
+            {users.map(user => (
+              <Tooltip key={user.charId} title={user.charName}>
+                <Avatar 
+                  src={getCharacterAvatarUrl(user.charId, 64)}
+                  style={{ border: '2px solid #3b82f6' }}
+                />
+              </Tooltip>
+            ))}
+          </Avatar.Group>
+          
+          <Select
+            value={null}
+            placeholder={
+              <Space>
+                <Text style={{ color: '#94a3b8' }}>
+                  {t?.srp?.welcome || '欢迎'}, <Text strong style={{ color: '#f1f5f9' }}>{primaryUser.charName}</Text>
+                </Text>
+                {users.length > 1 && (
+                  <Tag color="blue" style={{ marginLeft: 4 }}>+{users.length - 1}</Tag>
+                )}
+              </Space>
+            }
+            dropdownRender={() => (
+              <Menu items={userMenuItems} style={{ background: 'transparent' }} />
+            )}
+            style={{ 
+              minWidth: 180,
+              background: 'transparent',
+            }}
+            popupClassName="user-dropdown"
+            bordered={false}
+            suffixIcon={null}
+            open={undefined}
           />
-          <Text style={{ color: '#94a3b8' }}>
-            {t.srp.welcome}, <Text strong style={{ color: '#f1f5f9' }}>{user.charName}</Text>
-          </Text>
-          <Button 
-            type="text" 
-            icon={<LogoutOutlined />} 
-            onClick={handleLogout}
-            style={{ color: '#94a3b8' }}
-          >
-            {t.srp.logout}
-          </Button>
         </Space>
       </Header>
       
@@ -388,17 +666,20 @@ function UserLayout({ children }) {
   );
 }
 
-// 缓存键名
-const LOSSES_CACHE_KEY = 'srp_losses_cache';
+// 缓存键名前缀
+const LOSSES_CACHE_PREFIX = 'srp_losses_';
 const LOSSES_CACHE_EXPIRY = 10 * 60 * 1000; // 缓存10分钟
 const INITIAL_DISPLAY_COUNT = 15; // 初始显示数量 (3行 x 5列)
 const LOAD_MORE_COUNT = 15; // 每次加载更多的数量
 
-// 4. 用户面板：选择损失
+// 获取角色的缓存键
+const getLossesCacheKey = (charId) => `${LOSSES_CACHE_PREFIX}${charId}`;
+
+// 4. 用户面板：选择损失（多账号版本）
 function Dashboard() {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
   const navigate = useNavigate();
-  const [losses, setLosses] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [losses, setLosses] = useState([]); // 合并后的所有损失
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(null);
@@ -408,68 +689,138 @@ function Dashboard() {
   const [lastFetchTime, setLastFetchTime] = useState(null);
   const [displayCount, setDisplayCount] = useState(INITIAL_DISPLAY_COUNT);
   const { t } = useLanguage();
+  const { config } = useConfig();
+  
+  // 获取所有损失中的船只 ID
+  const shipTypeIds = useMemo(() => {
+    return losses.map(loss => loss.ship_type_id);
+  }, [losses]);
+  
+  // 获取船只名称（英文）
+  const { names: shipNames } = useShipNames(shipTypeIds);
 
-  // 从 API 获取损失数据
-  const fetchLosses = async (showRefreshMessage = false) => {
-    if (!user?.charId) return;
-    
+  // 初始化用户列表
+  useEffect(() => {
+    const currentUsers = getUsers();
+    if (currentUsers.length === 0) {
+      navigate('/srp');
+      return;
+    }
+    setUsers(currentUsers);
+  }, [navigate]);
+
+  // 从 API 获取单个角色的损失数据
+  const fetchLossesForUser = async (user) => {
     try {
-      const res = await userApi.get(`/losses/${user.charId}`);
-      setLosses(res.data);
+      const res = await userApi.get(`/losses/${user.charId}`, withUserToken(user.token));
+      // 为每条损失添加角色信息
+      const lossesWithUser = res.data.map(loss => ({
+        ...loss,
+        _charId: user.charId,
+        _charName: user.charName,
+        _token: user.token
+      }));
       
       // 保存到缓存
       const cacheData = {
-        charId: user.charId,
-        data: res.data,
+        data: lossesWithUser,
         timestamp: Date.now()
       };
-      sessionStorage.setItem(LOSSES_CACHE_KEY, JSON.stringify(cacheData));
-      setLastFetchTime(new Date());
+      sessionStorage.setItem(getLossesCacheKey(user.charId), JSON.stringify(cacheData));
       
-      if (showRefreshMessage) {
-        message.success('损失记录已刷新');
-      }
+      return lossesWithUser;
     } catch (err) {
-      console.error(err);
-      message.error('获取损失记录失败');
+      console.error(`获取 ${user.charName} 的损失记录失败:`, err);
+      // 如果是 token 失效，移除该用户
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        message.warning(`${user.charName} 的登录已过期，请重新添加`);
+        const newUsers = removeUser(user.charId);
+        setUsers(newUsers);
+      }
+      return [];
+    }
+  };
+
+  // 获取所有角色的损失数据
+  const fetchAllLosses = async (showRefreshMessage = false, forceRefresh = false) => {
+    if (users.length === 0) return;
+    
+    const allLosses = [];
+    
+    await Promise.all(users.map(async (user) => {
+      // 检查缓存
+      if (!forceRefresh) {
+        const cached = sessionStorage.getItem(getLossesCacheKey(user.charId));
+        if (cached) {
+          try {
+            const cacheData = JSON.parse(cached);
+            if (Date.now() - cacheData.timestamp < LOSSES_CACHE_EXPIRY) {
+              allLosses.push(...cacheData.data);
+              return;
+            }
+          } catch (e) {
+            sessionStorage.removeItem(getLossesCacheKey(user.charId));
+          }
+        }
+      }
+      
+      // 从 API 获取
+      const userLosses = await fetchLossesForUser(user);
+      allLosses.push(...userLosses);
+    }));
+    
+    // 按时间排序（最新的在前）
+    allLosses.sort((a, b) => new Date(b.killmail_time) - new Date(a.killmail_time));
+    
+    setLosses(allLosses);
+    setLastFetchTime(new Date());
+    
+    if (showRefreshMessage) {
+      message.success(t?.srp?.lossesRefreshed || '损失记录已刷新');
     }
   };
 
   // 手动刷新
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchLosses(true);
-    setDisplayCount(INITIAL_DISPLAY_COUNT); // 重置显示数量
+    await fetchAllLosses(true, true);
+    setDisplayCount(INITIAL_DISPLAY_COUNT);
     setRefreshing(false);
   };
 
+  // 用户列表变化时获取损失
   useEffect(() => {
-    if (!user?.charId || !user?.token) {
-      navigate('/srp');
+    if (users.length > 0) {
+      setLoading(true);
+      fetchAllLosses().finally(() => setLoading(false));
+    }
+  }, [users]);
+
+  // 添加新账号
+  const handleAddAccount = () => {
+    if (!config.eveClientId || !config.callbackUrl) {
+      message.error('SSO 配置未加载');
       return;
     }
+    const url = `https://login.eveonline.com/v2/oauth/authorize/?response_type=code&redirect_uri=${encodeURIComponent(config.callbackUrl)}&client_id=${config.eveClientId}&state=add_account`;
+    window.location.href = url;
+  };
+
+  // 移除账号
+  const handleRemoveAccount = (charId, charName) => {
+    const newUsers = removeUser(charId);
+    setUsers(newUsers);
+    // 清除该用户的缓存
+    sessionStorage.removeItem(getLossesCacheKey(charId));
+    // 从损失列表中移除该用户的损失
+    setLosses(prev => prev.filter(loss => loss._charId !== charId));
+    message.success(`${t?.srp?.accountRemoved?.replace('{name}', charName) || `已移除角色: ${charName}`}`);
     
-    // 检查缓存
-    const cached = sessionStorage.getItem(LOSSES_CACHE_KEY);
-    if (cached) {
-      try {
-        const cacheData = JSON.parse(cached);
-        // 验证缓存是否属于当前用户且未过期
-        if (cacheData.charId === user.charId && 
-            Date.now() - cacheData.timestamp < LOSSES_CACHE_EXPIRY) {
-          setLosses(cacheData.data);
-          setLastFetchTime(new Date(cacheData.timestamp));
-          setLoading(false);
-          return;
-        }
-      } catch (e) {
-        sessionStorage.removeItem(LOSSES_CACHE_KEY);
-      }
+    // 如果没有用户了，跳转到登录页
+    if (newUsers.length === 0) {
+      navigate('/srp');
     }
-    
-    // 无缓存或缓存过期，从 API 获取
-    fetchLosses().finally(() => setLoading(false));
-  }, []);
+  };
 
   const openSubmitModal = (loss) => {
     setSelectedLoss(loss);
@@ -482,38 +833,97 @@ function Dashboard() {
     
     setSubmitting(selectedLoss.killmail_id);
     try {
+      // 使用该损失对应角色的 token 提交
       await userApi.post('/srp', {
         lossMail: selectedLoss,
         comment
-      });
-      message.success(t.srp.submitSuccess);
+      }, withUserToken(selectedLoss._token));
+      message.success(t?.srp?.submitSuccess || '申请提交成功！');
       setModalVisible(false);
     } catch (err) {
-      message.error(t.srp.submitFailed + ': ' + (err.response?.data?.error || '未知错误'));
+      message.error((t?.srp?.submitFailed || '提交失败') + ': ' + (err.response?.data?.error || '未知错误'));
     } finally {
       setSubmitting(null);
     }
   };
 
-  if (!user.charId) return null;
+  if (users.length === 0) return null;
 
   return (
     <UserLayout>
+      {/* 多账号管理区域 */}
+      <Card
+        size="small"
+        style={{ 
+          marginBottom: 16,
+          background: 'rgba(30, 41, 59, 0.6)',
+          border: '1px solid rgba(51, 65, 85, 0.5)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <Text style={{ color: '#94a3b8', marginRight: 8 }}>
+            {t?.srp?.loggedInAccounts || '已登录角色'}:
+          </Text>
+          {users.map(user => (
+            <Tag
+              key={user.charId}
+              closable
+              onClose={(e) => {
+                e.preventDefault();
+                Modal.confirm({
+                  title: t?.srp?.confirmRemoveAccount || '确认移除账号',
+                  content: `${t?.srp?.confirmRemoveAccountDesc?.replace('{name}', user.charName) || `确定要移除 ${user.charName} 吗？`}`,
+                  okText: t?.admin?.confirm || '确定',
+                  cancelText: t?.srp?.cancel || '取消',
+                  onOk: () => handleRemoveAccount(user.charId, user.charName)
+                });
+              }}
+              style={{ 
+                padding: '4px 8px', 
+                display: 'flex', 
+                alignItems: 'center',
+                background: 'rgba(59, 130, 246, 0.2)',
+                border: '1px solid rgba(59, 130, 246, 0.4)',
+              }}
+            >
+              <Avatar 
+                src={getCharacterAvatarUrl(user.charId, 32)} 
+                size={20} 
+                style={{ marginRight: 6 }}
+              />
+              <span style={{ color: '#f1f5f9' }}>{user.charName}</span>
+            </Tag>
+          ))}
+          <Button
+            type="dashed"
+            size="small"
+            icon={<PlusOutlined />}
+            onClick={handleAddAccount}
+            style={{ borderColor: '#3b82f6', color: '#3b82f6' }}
+          >
+            {t?.srp?.addAccount || '添加账号'}
+          </Button>
+        </div>
+      </Card>
+
       <Card
         title={
           <Space>
             <PlusOutlined />
-            <span>{t.srp.applyTitle}</span>
+            <span>{t?.srp?.applyTitle || '申请补损'}</span>
+            {users.length > 1 && (
+              <Tag color="blue">{users.length} {t?.srp?.accountsTotal || '个账号'}</Tag>
+            )}
           </Space>
         }
         extra={
           <Space>
             {lastFetchTime && (
               <Text type="secondary" style={{ fontSize: 12 }}>
-                {t.srp.lastUpdate || '上次更新'}: {lastFetchTime.toLocaleTimeString()}
+                {t?.srp?.lastUpdate || '上次更新'}: {lastFetchTime.toLocaleTimeString()}
               </Text>
             )}
-            <Tooltip title={t.srp.refreshLosses || '刷新损失记录'}>
+            <Tooltip title={t?.srp?.refreshLosses || '刷新损失记录'}>
               <Button
                 type="text"
                 icon={<ReloadOutlined spin={refreshing} />}
@@ -532,32 +942,88 @@ function Dashboard() {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
             <Spin size="large" />
-            <Paragraph style={{ marginTop: 16 }}>{t.srp.fetchingLosses}</Paragraph>
+            <Paragraph style={{ marginTop: 16 }}>{t?.srp?.fetchingLosses || '正在获取数据...'}</Paragraph>
           </div>
         ) : losses.length === 0 ? (
           <Empty 
-            description={t.srp.noLosses} 
+            description={t?.srp?.noLosses || '暂无损失记录'} 
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         ) : (
           <>
             <Row gutter={[16, 16]}>
               {losses.slice(0, displayCount).map(loss => (
-                <Col xs={24} sm={12} lg={8} key={loss.killmail_id}>
+                <Col xs={24} sm={12} lg={8} key={`${loss._charId}-${loss.killmail_id}`}>
                   <Card
                     size="small"
                     style={{ 
                       background: 'rgba(15, 17, 25, 0.6)',
                       border: '1px solid rgba(51, 65, 85, 0.5)',
+                      overflow: 'hidden',
                     }}
+                    cover={
+                      <div style={{ 
+                        position: 'relative',
+                        height: 140,
+                        background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                      }}>
+                        <img
+                          src={getShipRenderUrl(loss.ship_type_id, 256)}
+                          alt={`Ship ${loss.ship_type_id}`}
+                          style={{
+                            maxHeight: '120%',
+                            maxWidth: '120%',
+                            objectFit: 'contain',
+                            filter: 'drop-shadow(0 4px 12px rgba(59, 130, 246, 0.3))',
+                          }}
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                        {/* 多账号时显示角色头像 */}
+                        {users.length > 1 && (
+                          <Tooltip title={loss._charName}>
+                            <Avatar 
+                              src={getCharacterAvatarUrl(loss._charId, 64)} 
+                              size={32}
+                              style={{ 
+                                position: 'absolute',
+                                top: 8,
+                                left: 8,
+                                border: '2px solid #3b82f6',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                              }}
+                            />
+                          </Tooltip>
+                        )}
+                        {/* 损失价值标签 */}
+                        <Tag 
+                          style={{ 
+                            position: 'absolute',
+                            bottom: 8,
+                            right: 8,
+                            background: 'rgba(245, 158, 11, 0.9)',
+                            border: 'none',
+                            color: '#fff',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          {loss.zkb?.totalValue ? formatISK(Math.round(loss.zkb.totalValue)) : '?'} ISK
+                        </Tag>
+                      </div>
+                    }
                     actions={[
-                      <Tooltip title="在 zKillboard 查看详情" key="link">
+                      <Tooltip title={t?.srp?.viewOnZkill || '在 zKillboard 查看详情'} key="link">
                         <a
                           href={`https://zkillboard.com/kill/${loss.killmail_id}/`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
-                          <LinkOutlined /> 详情
+                          <LinkOutlined /> {t?.srp?.view || '详情'}
                         </a>
                       </Tooltip>,
                       <Button
@@ -566,25 +1032,27 @@ function Dashboard() {
                         onClick={() => openSubmitModal(loss)}
                         loading={submitting === loss.killmail_id}
                       >
-                        <PlusOutlined /> 申请
+                        <PlusOutlined /> {t?.srp?.apply || '申请'}
                       </Button>
                     ]}
                   >
                     <Card.Meta
                       title={
-                        <Space>
-                          <RocketOutlined style={{ color: '#3b82f6' }} />
-                          <span>{t.srp.shipId}: {loss.ship_type_id}</span>
-                        </Space>
+                        <Text strong style={{ color: '#f1f5f9', fontSize: 14 }}>
+                          {shipNames[loss.ship_type_id] || `Type ${loss.ship_type_id}`}
+                        </Text>
                       }
                       description={
-                        <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                          <Text type="secondary">
-                            <ClockCircleOutlined style={{ marginRight: 8 }} />
+                        <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                          {users.length > 1 && (
+                            <Text style={{ color: '#60a5fa', fontSize: 12 }}>
+                              <UserOutlined style={{ marginRight: 4 }} />
+                              {loss._charName}
+                            </Text>
+                          )}
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            <ClockCircleOutlined style={{ marginRight: 4 }} />
                             {new Date(loss.killmail_time).toLocaleString()}
-                          </Text>
-                          <Text style={{ color: '#f59e0b' }}>
-                            {t.srp.lossValue}: {loss.zkb?.totalValue ? formatISK(Math.round(loss.zkb.totalValue)) : '未知'} ISK
                           </Text>
                         </Space>
                       }
@@ -602,11 +1070,11 @@ function Dashboard() {
                   onClick={() => setDisplayCount(prev => prev + LOAD_MORE_COUNT)}
                   style={{ width: 200 }}
                 >
-                  {t.srp.loadMore || '加载更多'} ({losses.length - displayCount} {t.srp.remaining || '条剩余'})
+                  {t?.srp?.loadMore || '加载更多'} ({losses.length - displayCount} {t?.srp?.remaining || '条剩余'})
                 </Button>
               ) : (
                 <Text type="secondary">
-                  {t.srp.showingAll || '已显示全部'} {losses.length} {t.srp.records || '条记录'}
+                  {t?.srp?.showingAll || '已显示全部'} {losses.length} {t?.srp?.records || '条记录'}
                 </Text>
               )}
             </div>
@@ -619,31 +1087,91 @@ function Dashboard() {
         title={
           <Space>
             <PlusOutlined />
-            <span>{t.srp.submitModal}</span>
+            <span>{t?.srp?.submitModal || '提交补损申请'}</span>
           </Space>
         }
         open={modalVisible}
         onCancel={() => setModalVisible(false)}
         onOk={handleSubmit}
-        okText={t.srp.submitButton}
-        cancelText={t.srp.cancel}
+        okText={t?.srp?.submitButton || '提交申请'}
+        cancelText={t?.srp?.cancel || '取消'}
         confirmLoading={!!submitting}
+        width={480}
       >
         {selectedLoss && (
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
-            <Card size="small" style={{ background: 'rgba(15, 17, 25, 0.4)' }}>
-              <Space direction="vertical" size={4}>
-                <Text>{t.srp.shipId}: <Text strong>{selectedLoss.ship_type_id}</Text></Text>
-                <Text>击杀时间: <Text type="secondary">{new Date(selectedLoss.killmail_time).toLocaleString()}</Text></Text>
-                <Text>{t.srp.lossValue}: <Text style={{ color: '#f59e0b' }}>{selectedLoss.zkb?.totalValue ? formatISK(Math.round(selectedLoss.zkb.totalValue)) : '未知'} ISK</Text></Text>
+            {/* 船只图片展示 */}
+            <div style={{ 
+              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%)',
+              borderRadius: 8,
+              padding: 16,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 16,
+            }}>
+              <img
+                src={getShipRenderUrl(selectedLoss.ship_type_id, 256)}
+                alt={`Ship ${selectedLoss.ship_type_id}`}
+                style={{
+                  width: 100,
+                  height: 100,
+                  objectFit: 'contain',
+                  filter: 'drop-shadow(0 4px 12px rgba(59, 130, 246, 0.4))',
+                }}
+                onError={(e) => {
+                  e.currentTarget.src = getShipIconUrl(selectedLoss.ship_type_id, 64);
+                }}
+              />
+              <Space direction="vertical" size={4} style={{ flex: 1 }}>
+                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#f1f5f9' }}>
+                  {shipNames[selectedLoss.ship_type_id] || `Type ${selectedLoss.ship_type_id}`}
+                </Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>ID: {selectedLoss.ship_type_id}</Text>
+                <Space>
+                  <Avatar 
+                    src={getCharacterAvatarUrl(selectedLoss._charId, 32)} 
+                    size="small"
+                  />
+                  <Text style={{ color: '#60a5fa' }}>{selectedLoss._charName}</Text>
+                </Space>
+                <Text style={{ color: '#f59e0b', fontSize: 16, fontWeight: 'bold' }}>
+                  {selectedLoss.zkb?.totalValue ? formatISK(Math.round(selectedLoss.zkb.totalValue)) : '?'} ISK
+                </Text>
               </Space>
+            </div>
+
+            <Card size="small" style={{ background: 'rgba(15, 17, 25, 0.4)' }}>
+              <Row gutter={[16, 8]}>
+                <Col span={12}>
+                  <Text type="secondary">{t?.srp?.killTime || '击杀时间'}</Text>
+                  <div>
+                    <Text style={{ color: '#f1f5f9' }}>
+                      {new Date(selectedLoss.killmail_time).toLocaleString()}
+                    </Text>
+                  </div>
+                </Col>
+                <Col span={12}>
+                  <Text type="secondary">Killmail ID</Text>
+                  <div>
+                    <a 
+                      href={`https://zkillboard.com/kill/${selectedLoss.killmail_id}/`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: '#3b82f6' }}
+                    >
+                      {selectedLoss.killmail_id} <LinkOutlined />
+                    </a>
+                  </div>
+                </Col>
+              </Row>
             </Card>
+
             <div>
-              <Text style={{ marginBottom: 8, display: 'block' }}>{t.srp.commentLabel}:</Text>
+              <Text style={{ marginBottom: 8, display: 'block' }}>{t?.srp?.commentLabel || '备注说明 (可选)'}:</Text>
               <TextArea
                 value={comment}
                 onChange={e => setComment(e.target.value)}
-                placeholder={t.srp.commentPlaceholder}
+                placeholder={t?.srp?.commentPlaceholder || '例如：舰队行动中被击毁...'}
                 rows={3}
               />
             </div>
@@ -654,69 +1182,158 @@ function Dashboard() {
   );
 }
 
-// 5. 我的申请页面
+// 5. 我的申请页面（多账号版本）
 function MyRequests() {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
   const navigate = useNavigate();
+  const [users, setUsers] = useState([]);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [playerStats, setPlayerStats] = useState(null);
+  const [aggregatedStats, setAggregatedStats] = useState(null);
   const { t } = useLanguage();
+  
+  // 获取所有申请中的船只 ID
+  const shipTypeIds = useMemo(() => {
+    return requests.map(req => req.ship_type_id);
+  }, [requests]);
+  
+  // 获取船只名称（英文）
+  const { names: shipNames } = useShipNames(shipTypeIds);
 
+  // 初始化用户列表
   useEffect(() => {
-    if (!user?.charId || !user?.token) {
+    const currentUsers = getUsers();
+    if (currentUsers.length === 0) {
       navigate('/srp');
       return;
     }
-    // 获取申请记录
-    userApi.get(`/srp/my/${user.charId}`)
-      .then(res => setRequests(res.data))
-      .catch(err => {
-        console.error(err);
-        message.error('获取申请记录失败');
-      })
-      .finally(() => setLoading(false));
-    
-    // 获取玩家统计
-    userApi.get(`/srp/stats/${user.charId}`)
-      .then(res => setPlayerStats(res.data))
-      .catch(err => console.error('获取统计失败:', err));
-  }, []);
+    setUsers(currentUsers);
+  }, [navigate]);
+
+  // 获取所有角色的申请记录和统计
+  useEffect(() => {
+    if (users.length === 0) return;
+
+    const fetchAllData = async () => {
+      const allRequests = [];
+      const statsData = {
+        totalRequests: 0,
+        approvedCount: 0,
+        totalPayout: 0
+      };
+
+      await Promise.all(users.map(async (user) => {
+        try {
+          // 获取申请记录
+          const reqRes = await userApi.get(`/srp/my/${user.charId}`, withUserToken(user.token));
+          const userRequests = reqRes.data.map(req => ({
+            ...req,
+            _charId: user.charId,
+            _charName: user.charName
+          }));
+          allRequests.push(...userRequests);
+
+          // 获取统计
+          const statsRes = await userApi.get(`/srp/stats/${user.charId}`, withUserToken(user.token));
+          statsData.totalRequests += statsRes.data.totalRequests || 0;
+          statsData.approvedCount += statsRes.data.approvedCount || 0;
+          statsData.totalPayout += statsRes.data.totalPayout || 0;
+        } catch (err) {
+          console.error(`获取 ${user.charName} 的数据失败:`, err);
+          if (err.response?.status === 401 || err.response?.status === 403) {
+            message.warning(`${user.charName} 的登录已过期`);
+          }
+        }
+      }));
+
+      // 按提交时间排序（最新的在前）
+      allRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      setRequests(allRequests);
+      setAggregatedStats(statsData);
+      setLoading(false);
+    };
+
+    fetchAllData();
+  }, [users]);
+
+  // 是否为多账号模式
+  const isMultiAccount = users.length > 1;
 
   const columns = [
+    // 多账号时显示角色列
+    ...(isMultiAccount ? [{
+      title: t?.srp?.character || '角色',
+      dataIndex: '_charName',
+      key: '_charName',
+      width: 120,
+      render: (name, record) => (
+        <Space>
+          <Avatar 
+            src={getCharacterAvatarUrl(record._charId, 32)} 
+            size="small"
+          />
+          <Text style={{ color: '#60a5fa' }}>{name}</Text>
+        </Space>
+      ),
+    }] : []),
     {
-      title: t.srp.submitTime,
+      title: t?.srp?.ship || '舰船',
+      dataIndex: 'ship_type_id',
+      key: 'ship_type_id',
+      width: 160,
+      render: (typeId) => (
+        <Space>
+          <img
+            src={getShipRenderUrl(typeId, 64)}
+            alt={shipNames[typeId] || `Ship ${typeId}`}
+            style={{
+              width: 40,
+              height: 40,
+              objectFit: 'contain',
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+            }}
+            onError={(e) => {
+              e.currentTarget.src = getShipIconUrl(typeId, 64);
+            }}
+          />
+          <Space direction="vertical" size={0}>
+            <Text style={{ color: '#f1f5f9', fontSize: 13 }}>
+              {shipNames[typeId] || `Type ${typeId}`}
+            </Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              ID: {typeId}
+            </Text>
+          </Space>
+        </Space>
+      ),
+    },
+    {
+      title: t?.srp?.submitTime || '提交时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: 180,
+      width: 160,
       render: (text) => new Date(text).toLocaleString(),
     },
     {
-      title: t.srp.shipId,
-      dataIndex: 'ship_type_id',
-      key: 'ship_type_id',
-      width: 100,
-    },
-    {
-      title: t.srp.zkillLink,
+      title: t?.srp?.zkillLink || 'zKill链接',
       dataIndex: 'zkill_url',
       key: 'zkill_url',
       width: 100,
       render: (url) => (
         <a href={url} target="_blank" rel="noopener noreferrer">
-          <LinkOutlined /> {t.srp.view}
+          <LinkOutlined /> {t?.srp?.view || '查看'}
         </a>
       ),
     },
     {
-      title: t.srp.myComment,
+      title: t?.srp?.myComment || '我的备注',
       dataIndex: 'player_comment',
       key: 'player_comment',
       ellipsis: true,
       render: (text) => text || <Text type="secondary">-</Text>,
     },
     {
-      title: t.srp.status,
+      title: t?.srp?.status || '状态',
       dataIndex: 'status',
       key: 'status',
       width: 120,
@@ -725,13 +1342,13 @@ function MyRequests() {
         const config = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
         return (
           <Tag color={config.color} icon={config.icon}>
-            {t.srp[status] || config.text}
+            {t?.srp?.[status] || config.text}
           </Tag>
         );
       },
     },
     {
-      title: t.srp.payoutAmount || '补损金额',
+      title: t?.srp?.payoutAmount || '补损金额',
       dataIndex: 'payout_amount',
       key: 'payout_amount',
       width: 130,
@@ -745,7 +1362,7 @@ function MyRequests() {
       ),
     },
     {
-      title: t.srp.adminFeedback,
+      title: t?.srp?.adminFeedback || '管理员反馈',
       key: 'admin_feedback',
       render: (_, record) => (
         record.admin_comment ? (
@@ -762,12 +1379,12 @@ function MyRequests() {
     },
   ];
 
-  if (!user.charId) return null;
+  if (users.length === 0) return null;
 
   return (
     <UserLayout>
-      {/* 玩家补损统计卡片 */}
-      {playerStats && (
+      {/* 汇总统计卡片 */}
+      {aggregatedStats && (
         <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
           <Col xs={24} sm={8}>
             <Card 
@@ -777,8 +1394,13 @@ function MyRequests() {
               }}
             >
               <Statistic 
-                title={<Text type="secondary">{t.srp.totalRequests || '总申请数'}</Text>}
-                value={playerStats.totalRequests}
+                title={
+                  <Text type="secondary">
+                    {t?.srp?.totalRequests || '总申请数'}
+                    {isMultiAccount && <Tag color="blue" style={{ marginLeft: 8 }}>{users.length} {t?.srp?.accountsTotal || '个账号'}</Tag>}
+                  </Text>
+                }
+                value={aggregatedStats.totalRequests}
                 valueStyle={{ color: '#f1f5f9' }}
               />
             </Card>
@@ -792,8 +1414,8 @@ function MyRequests() {
               }}
             >
               <Statistic 
-                title={<Text type="secondary">{t.srp.approvedRequests || '已批准'}</Text>}
-                value={playerStats.approvedCount}
+                title={<Text type="secondary">{t?.srp?.approvedRequests || '已批准'}</Text>}
+                value={aggregatedStats.approvedCount}
                 valueStyle={{ color: '#10b981' }}
                 prefix={<CheckCircleOutlined />}
               />
@@ -808,8 +1430,8 @@ function MyRequests() {
               }}
             >
               <Statistic 
-                title={<Text type="secondary">{t.srp.totalPayout || '累计补损'}</Text>}
-                value={playerStats.totalPayout}
+                title={<Text type="secondary">{t?.srp?.totalPayout || '累计补损'}</Text>}
+                value={aggregatedStats.totalPayout}
                 valueStyle={{ color: '#f59e0b' }}
                 suffix="ISK"
                 formatter={(value) => value.toLocaleString()}
@@ -823,10 +1445,13 @@ function MyRequests() {
         title={
           <Space>
             <FileTextOutlined />
-            <span>{t.srp.myRequests}</span>
+            <span>{t?.srp?.myRequests || '我的申请'}</span>
+            {isMultiAccount && (
+              <Tag color="blue">{t?.srp?.allAccountsRequests || '所有账号'}</Tag>
+            )}
           </Space>
         }
-        extra={<Text type="secondary">{t.srp.myRequestsDesc}</Text>}
+        extra={<Text type="secondary">{t?.srp?.myRequestsDesc || '查看申请进度和管理员反馈'}</Text>}
         style={{ 
           background: 'rgba(30, 41, 59, 0.6)',
           border: '1px solid rgba(51, 65, 85, 0.5)',
@@ -835,11 +1460,11 @@ function MyRequests() {
         <Table
           columns={columns}
           dataSource={requests}
-          rowKey="id"
+          rowKey={(record) => `${record._charId || record.char_id}-${record.id}`}
           loading={loading}
           pagination={{ pageSize: 10 }}
-          locale={{ emptyText: <Empty description="暂无申请记录" /> }}
-          scroll={{ x: 800 }}
+          locale={{ emptyText: <Empty description={t?.srp?.noRequests || '暂无申请记录'} /> }}
+          scroll={{ x: 900 }}
         />
       </Card>
     </UserLayout>
