@@ -1,9 +1,11 @@
 {
-  "name": "server",
+  "name": "eve-srp-server",
   "version": "1.0.0",
-  "description": "",
+  "description": "EVE Online SRP (Ship Replacement Program) 后端 API 服务",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

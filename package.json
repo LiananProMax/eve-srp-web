@@ -1,0 +1,38 @@
+{
+  "name": "eve-srp",
+  "version": "1.0.0",
+  "description": "EVE Online 军团补损系统 (Ship Replacement Program)",
+  "private": true,
+  "scripts": {
+    "setup": "node scripts/setup.js",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "start": "pm2 start ecosystem.config.js --env production",
+    "start:api": "pm2 start ecosystem.config.js --only eve-srp-api --env production",
+    "stop": "pm2 stop all",
+    "restart": "pm2 restart all --env production",
+    "logs": "pm2 logs",
+    "deploy": "node scripts/deploy.js --full",
+    "deploy:build": "node scripts/deploy.js --build",
+    "deploy:start": "node scripts/deploy.js --start",
+    "deploy:restart": "node scripts/deploy.js --restart",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install"
+  },
+  "keywords": [
+    "eve-online",
+    "srp",
+    "ship-replacement-program",
+    "corporation",
+    "management"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

@@ -1,7 +1,7 @@
 # 依赖目录
 node_modules/
 
-# 环境变量文件
+# 环境变量文件 (保留 env.example)
 .env
 .env.local
 .env.*.local
@@ -36,3 +36,6 @@ coverage/
 # 临时文件
 tmp/
 temp/
+
+# PM2
+.pm2/
